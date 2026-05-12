@@ -2,7 +2,7 @@
 
 Empirical notes from running `llama.cpp` Speculative Decoding on **AMD Strix Halo (gfx1151)** with **Vulkan**. The headline finding: with a **Qwen3.5-27B-Q4_0 target + Qwen3.5-0.8B-Q4_0 draft + `--spec-draft-n-max=4`**, real-world prompts (code/chat/reasoning) hit **1.49× – 2.05× speedup** while staying **stable across runs (variance < 1.04×)** — far better than any n-gram-based spec-dec on the same hardware.
 
-This repo is a *lab notebook*, not a polished benchmark suite. Phases 1 (results), 2 (reproduction: Docker + scripts), and 3 (full per-cell tables + raw JSON) are all in place. Known open items are listed under "What we didn't measure (yet)" in [results/00-quick-take.md](results/00-quick-take.md).
+This repo is a *lab notebook*, not a polished benchmark suite. Phases 1 (results), 2 (reproduction: Docker + scripts), 3 (full per-cell tables + raw JSON), and 4 (Qwen3.6-27B-MTP self-speculation) are all in place. Known open items are listed under "What we didn't measure (yet)" in [results/00-quick-take.md](results/00-quick-take.md).
 
 ## TL;DR
 
@@ -10,6 +10,7 @@ This repo is a *lab notebook*, not a polished benchmark suite. Phases 1 (results
 |---|---|---|
 | **Default for 27B-Q4_0** ⭐ | `--spec-type` (draft model), `-md Qwen3.5-0.8B-Q4_0.gguf`, `--spec-draft-n-max=4 --spec-draft-n-min=1` | **1.49× – 2.05×** (mean 1.82×), accept 96-98%, variance < 1.04× |
 | Push for max P_code | Same, `--spec-draft-n-max=16 --spec-draft-n-min=1` | **2.45× on P_code**, but accept 92-97% (variance ↑, kernel efficiency ↓) |
+| **Alt: Qwen3.6-27B + MTP self-spec** | Target `Qwen3.6-27B-UD-Q4_K_XL.gguf` + `--spec-type mtp --spec-draft-n-max=4` (no `-md`) | **1.83× – 2.33×** (mean 2.15×), accept 54-81%; single GGUF, no draft model required ([04-mtp.md](results/04-mtp.md)) |
 | Avoid on Qwen3.6-35B-A3B | Same draft + K=4 | Only +11%, P_chat slows down to **0.90×** (MoE baseline 58 t/s already fast, spec-dec overhead eats gain) |
 | All n-gram families | `--spec-type ngram-{simple,mod,cache}` | Rejected — best case (ngram-mod on P_code, 35B-A3B only) is 1.52× and **var 1.76×**; chat/reason flat or slower |
 
@@ -35,7 +36,8 @@ If you only remember one knob: **target = 27B-Q4_0, draft = 0.8B-Q4_0, K = 4, mi
 - **[results/01-headline.md](results/01-headline.md)** — numbers behind the K=4 recommendation, kernel-efficiency curve, 35B-A3B contrast
 - **[results/02-context.md](results/02-context.md)** — hardware/software stack and what's specific to this configuration
 - **[results/03-full-tables.md](results/03-full-tables.md)** — full per-cell tables (every cell that contributes a number on 00/01) with raw-data links
-- **[data/raw/](data/raw/)** — sanitized per-run JSON (8 files, one per bench session) — re-runnable with `scripts/run_bench.py`
+- **[results/04-mtp.md](results/04-mtp.md)** — Qwen3.6-27B-MTP self-speculation K-sweep (built-in MTP head, no external draft GGUF needed)
+- **[data/raw/](data/raw/)** — sanitized per-run JSON (9 files, one per bench session) — re-runnable with `scripts/run_bench.py`
 
 ## Phases (publishing roadmap)
 
@@ -43,7 +45,8 @@ If you only remember one knob: **target = 27B-Q4_0, draft = 0.8B-Q4_0, K = 4, mi
 |---|---|---|
 | 1. Results | ✅ done | README + `results/00..02` + LICENSE |
 | 2. Reproduction | ✅ done | [`docker/`](docker/) (Dockerfile.mtp-vulkan + 2 patches + build/run doc), [`scripts/`](scripts/) (single-file `run_bench.py` with `httpx` only + sweep recipes) |
-| **3. Per-cell tables + raw data** | ✅ this push | [`results/03-full-tables.md`](results/03-full-tables.md) (per-cell tg/accept/draft_n medians) + [`data/raw/`](data/raw/) (8 sanitized JSON files) |
+| 3. Per-cell tables + raw data | ✅ done | [`results/03-full-tables.md`](results/03-full-tables.md) (per-cell tg/accept/draft_n medians) + [`data/raw/`](data/raw/) (8 sanitized JSON files) |
+| **4. MTP self-speculation (Qwen3.6-27B)** | ✅ this push | [`results/04-mtp.md`](results/04-mtp.md) (built-in MTP head K-sweep, K=3-4 = 2.13-2.15× avg, K=8 P_chat collapses to 0.90×) + [`data/raw/specdec_qwen36_27b_mtp_sweep.json`](data/raw/specdec_qwen36_27b_mtp_sweep.json) |
 
 ## Reproducing the numbers
 
