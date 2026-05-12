@@ -18,14 +18,14 @@ If you only remember one knob: **target = 27B-Q4_0, draft = 0.8B-Q4_0, K = 4, mi
 
 ## Why this is interesting
 
-1. **Folklore says K=1 is the ceiling on memory-bound hardware.** That claim came from `lorem ipsum` micro-benchmarks where the draft model loses confidence on repetitive token streams and the spec-dec round gets `p_min`-skipped (see [llama.cpp PR #22673](https://github.com/ggml-org/llama.cpp/pull/22673), `common/speculative.cpp:339`). On real prompts, draft 0.8B keeps 96-100% acceptance through K=4 — so the K↑ ceiling **never engages** and per-round token yield grows.
+1. **Folklore says K=1 is the ceiling on memory-bound hardware.** That claim came from `lorem ipsum` micro-benchmarks where the draft model loses confidence on repetitive token streams and the spec-dec round gets `p_min`-skipped (see [llama.cpp PR #22673](https://github.com/ggml-org/llama.cpp/pull/22673)<sup>[↘](#rel-pr-22673)</sup>, [`common/speculative.cpp:339`](#rel-speculative-cpp)). On real prompts, draft 0.8B keeps 96-100% acceptance through K=4 — so the K↑ ceiling **never engages** and per-round token yield grows.
 2. **Strix Halo's Vulkan batched-verify kernel is *partially* inefficient, not fully.** Kernel efficiency drops from 75% at K=1 to 47% at K=16 — but K=4 still hits 68% efficiency, which is why K=4 is the sweet spot rather than K=1 (DLS-045 line of reasoning) or K=16 (max raw speedup but accept and kernel both degrade).
 3. **The 35B-A3B MoE pattern is structurally different.** Its baseline tg (~58 t/s) is already memory-bound at 56% bandwidth utilization with only 3B active parameters. Adding a 0.8B draft forward pass *per accepted round* eats most of the spec-dec gain. Conclusion: spec-dec speedup is strongly tied to baseline tg being slow.
 
 ## What's measured
 
-- **Hardware**: AMD Strix Halo, gfx1151, 256 GB/s LPDDR5X (Vulkan path, ROCm flash-attn off — see [llama.cpp issue #12629](https://github.com/ggml-org/llama.cpp/issues/12629))
-- **llama.cpp build**: `am17an:mtp-clean` head SHA `5d5f1b46` (PR [#22673](https://github.com/ggml-org/llama.cpp/pull/22673)) — needed for the checkpoint-based spec-dec path that supports Qwen3.5 hybrid linear+full attention models
+- **Hardware**: AMD Strix Halo, gfx1151, 256 GB/s LPDDR5X (Vulkan path, ROCm flash-attn off — see [llama.cpp issue #12629](https://github.com/ggml-org/llama.cpp/issues/12629)<sup>[↘](#rel-vulkan-flash-attn)</sup>)
+- **llama.cpp build**: `am17an:mtp-clean` head SHA `5d5f1b46` (PR [#22673](https://github.com/ggml-org/llama.cpp/pull/22673)<sup>[↘](#rel-pr-22673)</sup>) — needed for the checkpoint-based spec-dec path that supports Qwen3.5 hybrid linear+full attention models
 - **Quants**: Qwen3.5-27B-Q4_0 (target, 15.7 GB), Qwen3.5-0.8B/2B/4B-Q4_0 (drafts), Qwen3.6-35B-A3B-UD-Q6_K (additional target, 28 GB)
 - **Prompts**: 3 fixed real-world prompts (Python `binary_search`, 3-day Kyoto trip plan, 2-train relative-motion problem), `max_tokens=512`, `temp=0`, `ctx=16384`, chat-template via `--jinja --reasoning-format auto`
 - **Methodology**: warmup + 3 measure runs per cell, server restarted between cells (`pkill llama-server` → wait `/v1/models`), sequential only (no GPU sharing during a run)
@@ -73,11 +73,11 @@ See [`docker/README.md`](docker/README.md) for the image internals, [`scripts/RE
 
 ## Related
 
-- llama.cpp Speculative Decoding upstream PR: https://github.com/ggml-org/llama.cpp/pull/22673 (`am17an:mtp-clean`, open as of 2026-05-12)
-- Strix Halo Vulkan flash-attn note: https://github.com/ggml-org/llama.cpp/issues/12629
-- `llama.cpp` `common/speculative.cpp` (`p_min` default 0.75, the early-break responsible for `lorem ipsum` K↑ regression)
-- `tools/server/server-context.cpp:2480` (round-discard when `n_min > draft.size()`, why `--spec-draft-n-min == --spec-draft-n-max` is an anti-pattern at K≥8)
-- Unsloth's Qwen3.6-27B-MTP-GGUF release (Phase 4 target): https://huggingface.co/unsloth/Qwen3.6-27B-MTP-GGUF — README advertises "MTP speculative decoding for ~1.5-2x faster generation"; our measurement at the recipe's K=3 reproduces the upper end (2.13× avg) on Strix Halo Vulkan (see [results/04-mtp.md](results/04-mtp.md))
+- <a id="rel-pr-22673"></a>llama.cpp Speculative Decoding upstream PR: https://github.com/ggml-org/llama.cpp/pull/22673 (`am17an:mtp-clean`, open as of 2026-05-12)
+- <a id="rel-vulkan-flash-attn"></a>Strix Halo Vulkan flash-attn note: https://github.com/ggml-org/llama.cpp/issues/12629
+- <a id="rel-speculative-cpp"></a>`llama.cpp` `common/speculative.cpp` (`p_min` default 0.75, the early-break responsible for `lorem ipsum` K↑ regression)
+- <a id="rel-server-context"></a>`tools/server/server-context.cpp:2480` (round-discard when `n_min > draft.size()`, why `--spec-draft-n-min == --spec-draft-n-max` is an anti-pattern at K≥8)
+- <a id="rel-unsloth-mtp"></a>Unsloth's Qwen3.6-27B-MTP-GGUF release (Phase 4 target): https://huggingface.co/unsloth/Qwen3.6-27B-MTP-GGUF — README advertises "MTP speculative decoding for ~1.5-2x faster generation"; our measurement at the recipe's K=3 reproduces the upper end (2.13× avg) on Strix Halo Vulkan (see [results/04-mtp.md](results/04-mtp.md))
 
 ## License
 

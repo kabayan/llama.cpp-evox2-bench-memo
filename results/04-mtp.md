@@ -22,11 +22,11 @@ Speedups are vs. the per-session baseline `A0_baseline` (no spec-dec, same hardw
 
 | | Phase 1-3 (external draft) | Phase 4 (MTP self-speculation) |
 |---|---|---|
-| target GGUF | `unsloth/Qwen3.5-27B-Q4_0.gguf` | [`unsloth/Qwen3.6-27B-UD-Q4_K_XL.gguf`](https://huggingface.co/unsloth/Qwen3.6-27B-MTP-GGUF) (17.9 GB) |
+| target GGUF | `unsloth/Qwen3.5-27B-Q4_0.gguf` | [`unsloth/Qwen3.6-27B-UD-Q4_K_XL.gguf`](https://huggingface.co/unsloth/Qwen3.6-27B-MTP-GGUF)<sup>[↘](../README.md#rel-unsloth-mtp)</sup> (17.9 GB) |
 | draft model | `unsloth/Qwen3.5-0.8B-Q4_0.gguf` (507 MB), passed via `-md` | none — the MTP head is inside the target GGUF |
 | llama-server flags | `--spec-type` (default: draft model), `-md draft.gguf`, `--spec-draft-n-max=K --spec-draft-n-min=1` | `--spec-type mtp --spec-draft-n-max=K` |
 | disk footprint | 15.2 GB target + 0.5 GB draft = 15.7 GB | 17.9 GB (single file, includes MTP head) |
-| compatibility | requires `am17an:mtp-clean` PR #22673 build | same build; the `mtp-clean` branch is also the source of MTP support |
+| compatibility | requires `am17an:mtp-clean` [PR #22673](../README.md#rel-pr-22673) build | same build; the `mtp-clean` branch is also the source of MTP support |
 
 Same hardware (AMD Strix Halo, Vulkan, gfx1151, `-fa off`), same prompts (P_code / P_chat / P_reason), same methodology (warmup + 3 measure runs, median tg, server restarted between cells).
 
@@ -63,7 +63,7 @@ The K=4 sweet spot for MTP is structurally similar to K=4 for external 0.8B: bot
 
 ## Unsloth's claims vs. what we measured
 
-The [Qwen3.6-27B-MTP-GGUF model card on Hugging Face](https://huggingface.co/unsloth/Qwen3.6-27B-MTP-GGUF) advertises MTP self-speculation prominently:
+The [Qwen3.6-27B-MTP-GGUF model card on Hugging Face](https://huggingface.co/unsloth/Qwen3.6-27B-MTP-GGUF)<sup>[↘](../README.md#rel-unsloth-mtp)</sup> advertises MTP self-speculation prominently:
 
 > **NEW: MTP speculative decoding for ~1.5-2x faster generation**
 
@@ -78,14 +78,14 @@ Unsloth's published recipe uses `--spec-draft-n-max=3` with `-fa on`. We ran on 
 
 **Short version: the headline claim holds.** K=3 (Unsloth's recipe) reproduces the upper end of the ~1.5-2× range; K=4 gives a marginal +0.02× over that on the average. Beyond K=4 the MTP path falls off — chat workloads in particular — which is not something the model card warns about. The K=4 sweet spot here matches the Phase 1-3 finding that external-draft spec-dec on this hardware also tops out at K=4 (for different reasons: kernel batch efficiency on the verify pass).
 
-**One gap we can't close from this sweep**: Unsloth recommends `-fa on`. Our Strix Halo Vulkan build defaults to `-fa off` because of [llama.cpp #12629](https://github.com/ggml-org/llama.cpp/issues/12629), so we cannot evaluate the recipe's `-fa on` portion on this hardware. Whether `-fa on` changes the K=3 / K=4 trade-off remains an open question — see "What we didn't measure (yet)" in [00-quick-take.md](00-quick-take.md).
+**One gap we can't close from this sweep**: Unsloth recommends `-fa on`. Our Strix Halo Vulkan build defaults to `-fa off` because of [llama.cpp #12629](https://github.com/ggml-org/llama.cpp/issues/12629)<sup>[↘](../README.md#rel-vulkan-flash-attn)</sup>, so we cannot evaluate the recipe's `-fa on` portion on this hardware. Whether `-fa on` changes the K=3 / K=4 trade-off remains an open question — see "What we didn't measure (yet)" in [00-quick-take.md](00-quick-take.md).
 
 ## Caveats
 
-- **`-fa on` (Vulkan flash-attn) not measured here.** Unsloth's published recipe uses `-fa on` but our Strix Halo Vulkan path defaults to `-fa off` per [llama.cpp #12629](https://github.com/ggml-org/llama.cpp/issues/12629). All Phase 1-3 numbers also use `-fa off`, so the comparison stays apples-to-apples — but the absolute speedups might shift with `-fa on`. Re-running this sweep under `-fa on` is the most obvious next experiment.
+- **`-fa on` (Vulkan flash-attn) not measured here.** Unsloth's published recipe uses `-fa on` but our Strix Halo Vulkan path defaults to `-fa off` per [llama.cpp #12629](https://github.com/ggml-org/llama.cpp/issues/12629)<sup>[↘](../README.md#rel-vulkan-flash-attn)</sup>. All Phase 1-3 numbers also use `-fa off`, so the comparison stays apples-to-apples — but the absolute speedups might shift with `-fa on`. Re-running this sweep under `-fa on` is the most obvious next experiment.
 - **MTP + `--mmproj` not supported.** The target is an image-text-to-text model, but the mtp-clean branch disallows `--mmproj` alongside `--spec-type mtp`. Open upstream constraint, no workaround.
 - **One model family tested.** MTP is a per-model architecture feature; the K=4 sweet spot from Qwen3.6-27B may not transfer to other MTP-capable models. As of 2026-05-12 Qwen3.6-35B-A3B does not have an MTP-GGUF release.
-- **PR #22673 is unmerged.** The build (`am17an:mtp-clean@5d5f1b46`) is the same as Phase 1-3. MTP self-speculation rides on the same checkpoint-based spec-dec mechanism.
+- **[PR #22673](../README.md#rel-pr-22673) is unmerged.** The build (`am17an:mtp-clean@5d5f1b46`) is the same as Phase 1-3. MTP self-speculation rides on the same checkpoint-based spec-dec mechanism.
 
 ## Raw data
 

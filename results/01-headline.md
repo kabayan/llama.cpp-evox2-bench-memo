@@ -15,7 +15,7 @@ Conventional wisdom from earlier `lorem ipsum` micro-benchmarks (DLS-045 in the 
 | N16 | 16 | 5 | 14.26 | 1.083× | 100% | 47 |
 | N32 | 32 | 5 | 14.26 | 1.083× | 100% | 47 |
 
-The K↑ regression there is real, but its cause is subtle: at K=N with `--spec-draft-n-min=N --spec-draft-n-max=N`, the draft model's `p_min=0.75` early-break (`common/speculative.cpp:339-341`) can leave fewer than N tokens in the draft buffer. The server then discards the round entirely (`tools/server/server-context.cpp:2480`, `if (slot.task->params.speculative.n_min > (int) draft.size()) continue;`). On `lorem ipsum`, with per-token confidence `q ≈ 0.85`, the survival probability `q^K` decays fast — at K=8 you keep only 27% of rounds, which is why the N8 cell shows 0.95× slowdown.
+The K↑ regression there is real, but its cause is subtle: at K=N with `--spec-draft-n-min=N --spec-draft-n-max=N`, the draft model's `p_min=0.75` early-break ([`common/speculative.cpp:339-341`](../README.md#rel-speculative-cpp)) can leave fewer than N tokens in the draft buffer. The server then discards the round entirely ([`tools/server/server-context.cpp:2480`](../README.md#rel-server-context), `if (slot.task->params.speculative.n_min > (int) draft.size()) continue;`). On `lorem ipsum`, with per-token confidence `q ≈ 0.85`, the survival probability `q^K` decays fast — at K=8 you keep only 27% of rounds, which is why the N8 cell shows 0.95× slowdown.
 
 On real prompts the draft 0.8B keeps `q ≈ 0.99` (acc=100% measured at K=1, 96-99% at K=4). The early-break essentially never fires, and the K↑ regression vanishes. Instead we get:
 

@@ -22,7 +22,7 @@ The 27B target leaves only ~22% bandwidth headroom for spec-dec verify passes, b
 
 ### llama.cpp build
 
-We use **`am17an:mtp-clean`** at head SHA `5d5f1b46`, the source branch of upstream PR [#22673](https://github.com/ggml-org/llama.cpp/pull/22673) ("llama + spec: MTP Support"). As of 2026-05-12 this PR is **open and unmerged**.
+We use **`am17an:mtp-clean`** at head SHA `5d5f1b46`, the source branch of upstream PR [#22673](https://github.com/ggml-org/llama.cpp/pull/22673)<sup>[↘](../README.md#rel-pr-22673)</sup> ("llama + spec: MTP Support"). As of 2026-05-12 this PR is **open and unmerged**.
 
 Why this build:
 - The stable `master` branch (build 8763) rejects spec-dec on Qwen3.5 family targets with `common_speculative_is_compat: the target context does not support partial sequence removal`. Qwen3.5 uses hybrid linear+full attention, which the partial-sequence-removal-required code path doesn't handle.
@@ -41,12 +41,12 @@ With these patches, `ngram-simple` on raw `/completion` + `lorem ipsum` reaches 
 
 | Backend container | Status | Notes |
 |---|---|---|
-| `vulkan` (stable) | spec-dec unsupported on Qwen3.5 | flash-attn off (per [llama.cpp #12629](https://github.com/ggml-org/llama.cpp/issues/12629)) |
+| `vulkan` (stable) | spec-dec unsupported on Qwen3.5 | flash-attn off (per [llama.cpp #12629](https://github.com/ggml-org/llama.cpp/issues/12629)<sup>[↘](../README.md#rel-vulkan-flash-attn)</sup>) |
 | `lemonade` (UD-Q4_K) | baseline reference only | stable build, no spec-dec |
 | **`mtp-vulkan`** ⭐ | spec-dec works | what all our numbers use |
 | `mtp-rocm` (ROCm 7.x + gfx1151) | spec-dec works but slower | accept rate similar to mtp-vulkan, but baseline ~12% lower (gfx1151 ROCm immature) |
 
-The `vulkan` flash-attn-off rule comes from [llama.cpp #12629](https://github.com/ggml-org/llama.cpp/issues/12629): on gfx1151, the Vulkan flash-attention path silently produces wrong outputs. We force `--flash-attn off` on Vulkan and `--flash-attn on` on ROCm/lemonade.
+The `vulkan` flash-attn-off rule comes from [llama.cpp #12629](https://github.com/ggml-org/llama.cpp/issues/12629)<sup>[↘](../README.md#rel-vulkan-flash-attn)</sup>: on gfx1151, the Vulkan flash-attention path silently produces wrong outputs. We force `--flash-attn off` on Vulkan and `--flash-attn on` on ROCm/lemonade.
 
 ## Methodology
 
