@@ -22,7 +22,7 @@ Speedups are vs. the per-session baseline `A0_baseline` (no spec-dec, same hardw
 
 | | Phase 1-3 (external draft) | Phase 4 (MTP self-speculation) |
 |---|---|---|
-| target GGUF | `unsloth/Qwen3.5-27B-Q4_0.gguf` | `unsloth/Qwen3.6-27B-UD-Q4_K_XL.gguf` (17.9 GB) |
+| target GGUF | `unsloth/Qwen3.5-27B-Q4_0.gguf` | [`unsloth/Qwen3.6-27B-UD-Q4_K_XL.gguf`](https://huggingface.co/unsloth/Qwen3.6-27B-MTP-GGUF) (17.9 GB) |
 | draft model | `unsloth/Qwen3.5-0.8B-Q4_0.gguf` (507 MB), passed via `-md` | none — the MTP head is inside the target GGUF |
 | llama-server flags | `--spec-type` (default: draft model), `-md draft.gguf`, `--spec-draft-n-max=K --spec-draft-n-min=1` | `--spec-type mtp --spec-draft-n-max=K` |
 | disk footprint | 15.2 GB target + 0.5 GB draft = 15.7 GB | 17.9 GB (single file, includes MTP head) |
@@ -60,6 +60,25 @@ At K=8, P_chat's median accept hits 27% — meaning the MTP head proposes 8 toke
 This is consistent with the Phase 1-3 finding that P_chat is the bottleneck across spec-dec regimes: conversational text has shorter high-confidence runs than code or reasoning, so any draft model (external 0.8B or built-in MTP head) hits a confidence wall sooner on chat.
 
 The K=4 sweet spot for MTP is structurally similar to K=4 for external 0.8B: both balance accept rate against per-round yield. MTP's accept-rate curve falls off harder than 0.8B-Q4_0's, which is why MTP's K=4 is at the edge of viability rather than (as for 0.8B) a comfortable middle of the curve.
+
+## Unsloth's claims vs. what we measured
+
+The [Qwen3.6-27B-MTP-GGUF model card on Hugging Face](https://huggingface.co/unsloth/Qwen3.6-27B-MTP-GGUF) advertises MTP self-speculation prominently:
+
+> **NEW: MTP speculative decoding for ~1.5-2x faster generation**
+
+Unsloth's published recipe uses `--spec-draft-n-max=3` with `-fa on`. We ran on Vulkan with `-fa off` (the Strix Halo gfx1151 flash-attention path produces wrong outputs — see [02-context.md](02-context.md)) and kept every other knob aligned.
+
+| Unsloth's claim | What we measured | Comment |
+|---|---|---|
+| ~1.5–2× faster generation | **2.13× avg at K=3** (Unsloth's recommended K), **2.15× avg at K=4** (peak) | Upper end of the claimed range reproduces; K=4 nudges past it. P_code K=4 hits 2.33×, well above the headline range |
+| Recipe default K=3 | K=3 = 2.13× avg, K=4 = 2.15× avg | Statistically a tie on the average; K=4 wins on P_code (2.33× vs. 2.28×) and loses ~6 pt of worst-case accept. Treating both as interchangeable is fine |
+| K↑ keeps helping (implicit) | K=5 = 2.04×, K=8 = 1.42× (P_chat collapses to 0.90×) | The model card doesn't bound K from above; in our measurement, beyond K=4 the MTP head's joint-prediction confidence falls off fast and K=8 is a runtime regression on chat workloads |
+| Single GGUF, no separate draft model | confirmed | The MTP head is loaded from the same file as the target. Server log: `loading MTP head from … (override_arch=qwen35_mtp)` and `set_mtp: MTP draft head registered (ctx_mtp=…, n_ubatch=512, n_embd=5120)` |
+
+**Short version: the headline claim holds.** K=3 (Unsloth's recipe) reproduces the upper end of the ~1.5-2× range; K=4 gives a marginal +0.02× over that on the average. Beyond K=4 the MTP path falls off — chat workloads in particular — which is not something the model card warns about. The K=4 sweet spot here matches the Phase 1-3 finding that external-draft spec-dec on this hardware also tops out at K=4 (for different reasons: kernel batch efficiency on the verify pass).
+
+**One gap we can't close from this sweep**: Unsloth recommends `-fa on`. Our Strix Halo Vulkan build defaults to `-fa off` because of [llama.cpp #12629](https://github.com/ggml-org/llama.cpp/issues/12629), so we cannot evaluate the recipe's `-fa on` portion on this hardware. Whether `-fa on` changes the K=3 / K=4 trade-off remains an open question — see "What we didn't measure (yet)" in [00-quick-take.md](00-quick-take.md).
 
 ## Caveats
 

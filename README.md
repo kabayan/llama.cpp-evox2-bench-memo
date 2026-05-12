@@ -77,6 +77,7 @@ See [`docker/README.md`](docker/README.md) for the image internals, [`scripts/RE
 - Strix Halo Vulkan flash-attn note: https://github.com/ggml-org/llama.cpp/issues/12629
 - `llama.cpp` `common/speculative.cpp` (`p_min` default 0.75, the early-break responsible for `lorem ipsum` K↑ regression)
 - `tools/server/server-context.cpp:2480` (round-discard when `n_min > draft.size()`, why `--spec-draft-n-min == --spec-draft-n-max` is an anti-pattern at K≥8)
+- Unsloth's Qwen3.6-27B-MTP-GGUF release (Phase 4 target): https://huggingface.co/unsloth/Qwen3.6-27B-MTP-GGUF — README advertises "MTP speculative decoding for ~1.5-2x faster generation"; our measurement at the recipe's K=3 reproduces the upper end (2.13× avg) on Strix Halo Vulkan (see [results/04-mtp.md](results/04-mtp.md))
 
 ## License
 
