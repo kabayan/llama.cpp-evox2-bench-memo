@@ -52,6 +52,25 @@ The 35B-A3B baseline at 58 t/s already pushes ~56% of available memory bandwidth
 
 For 35B-A3B on this hardware, **n-gram-mod with code prompts (1.51×, from a separate evaluation)** is still the only spec-dec config that pays off — but with variance ≈ 1.76× it's the kind of speedup that vanishes on individual runs.
 
+## Qwen3.6-27B-UD-Q4_K_XL + built-in MTP head (self-speculation)
+
+Alternative target: Unsloth ships [`Qwen3.6-27B-MTP-GGUF`](https://huggingface.co/unsloth/Qwen3.6-27B-MTP-GGUF) with the MTP draft head inside the same file. The model card advertises **"MTP speculative decoding for ~1.5-2× faster generation"**; we measured the recipe (`--spec-type mtp --spec-draft-n-max=3`) and the K-sweep around it on the same Strix Halo + Vulkan + `-fa off` stack.
+
+| K (`--spec-draft-n-max`) | P_code | P_chat | P_reason | avg | accept (min-max) |
+|---:|---:|---:|---:|---:|---:|
+| baseline | 11.86 (1.00×) | 11.81 (1.00×) | 11.84 (1.00×) | 1.00× | — |
+| 1 | 19.48 (1.64×) | 18.59 (1.57×) | 19.68 (1.66×) | 1.63× | 84-95% |
+| 2 | 25.63 (2.16×) | 22.34 (1.89×) | 25.28 (2.14×) | 2.06× | 73-93% |
+| **3** (Unsloth recipe) | 26.98 (2.28×) | 21.75 (1.84×) | 27.05 (2.29×) | **2.13×** | 60-84% |
+| **4** ⭐ | 27.65 (2.33×) | 21.55 (1.83×) | 27.05 (2.29×) | **2.15×** | 54-81% |
+| 8 | 20.41 (1.72×) | 11.67 (**0.90× ⚠️**) | 18.49 (1.56×) | 1.42× | 27-59% |
+
+**K=3 (Unsloth's recipe) reproduces the upper end of the claimed ~1.5-2× range — 2.13× avg.** K=4 nudges past it on the average (2.15×) and on P_code (2.33×); beyond K=4 the MTP head's joint-prediction confidence falls off fast and K=8 is a runtime regression on chat workloads.
+
+Absolute tg at K=4 (21.55-27.65 t/s) lands in the same band as Phase 1-3's external-draft K=4 (19.77-27.36 t/s) — MTP doesn't save tokens/sec on this hardware, it saves operator overhead (no second GGUF, no `-md` flag, no draft-vocab compatibility check).
+
+See [04-mtp.md](04-mtp.md) for the full claim-vs-measured comparison and the K=8 P_chat collapse analysis.
+
 ## What we rejected
 
 | Approach | Why rejected | Result |
@@ -65,6 +84,8 @@ For 35B-A3B on this hardware, **n-gram-mod with code prompts (1.51×, from a sep
 ## What we didn't measure (yet)
 
 - K=8/16 on 35B-A3B (predicted to be neutral or worse given K=4 already shows slowdown)
+- `-fa on` for the MTP K-sweep (Unsloth's recipe default; we ran `-fa off` because of [llama.cpp #12629](https://github.com/ggml-org/llama.cpp/issues/12629)<sup>[↘](../README.md#rel-vulkan-flash-attn)</sup> on gfx1151 — re-running this sweep on a backend where Vulkan flash-attn is correct would close that gap)
+- MTP-GGUF on a MoE target (e.g. 35B-A3B class) — Unsloth has not released one as of 2026-05-12; structurally interesting because the 35B-A3B baseline at 58 t/s already eats most of the spec-dec margin
 - Other model families (Llama 3.x): tokenizer compatibility is the gate, not measured
 - Direct kernel profiling (RGP / rocprof / Tracy) to confirm the partial-inefficiency model
 - AMD ROCm 7.x + gfx1151 (we tested mtp-rocm and got worse results; Vulkan path is preferred on this hardware)

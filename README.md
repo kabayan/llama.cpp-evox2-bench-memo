@@ -10,7 +10,7 @@ This repo is a *lab notebook*, not a polished benchmark suite. Phases 1 (results
 |---|---|---|
 | **Default for 27B-Q4_0** ⭐ | `--spec-type` (draft model), `-md Qwen3.5-0.8B-Q4_0.gguf`, `--spec-draft-n-max=4 --spec-draft-n-min=1` | **1.49× – 2.05×** (mean 1.82×), accept 96-98%, variance < 1.04× |
 | Push for max P_code | Same, `--spec-draft-n-max=16 --spec-draft-n-min=1` | **2.45× on P_code**, but accept 92-97% (variance ↑, kernel efficiency ↓) |
-| **Alt: Qwen3.6-27B + MTP self-spec** | Target `Qwen3.6-27B-UD-Q4_K_XL.gguf` + `--spec-type mtp --spec-draft-n-max=4` (no `-md`) | **1.83× – 2.33×** (mean 2.15×), accept 54-81%; single GGUF, no draft model required ([04-mtp.md](results/04-mtp.md)) |
+| **Alt: Qwen3.6-27B + MTP self-spec** | Target `Qwen3.6-27B-UD-Q4_K_XL.gguf` + `--spec-type mtp --spec-draft-n-max=4` (no `-md`) | **1.83× – 2.33×** (mean 2.15×), accept 54-81%; single GGUF, no draft model required. [Unsloth's HF card](https://huggingface.co/unsloth/Qwen3.6-27B-MTP-GGUF)<sup>[↘](#rel-unsloth-mtp)</sup> claims "**~1.5-2× faster generation**" — at the recipe's K=3 our **2.13× avg reproduces the upper end** ([04-mtp.md](results/04-mtp.md)) |
 | Avoid on Qwen3.6-35B-A3B | Same draft + K=4 | Only +11%, P_chat slows down to **0.90×** (MoE baseline 58 t/s already fast, spec-dec overhead eats gain) |
 | All n-gram families | `--spec-type ngram-{simple,mod,cache}` | Rejected — best case (ngram-mod on P_code, 35B-A3B only) is 1.52× and **var 1.76×**; chat/reason flat or slower |
 
