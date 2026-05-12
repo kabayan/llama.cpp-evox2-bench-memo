@@ -1,5 +1,7 @@
 # llama.cpp evox2 (Strix Halo) Speculative Decoding Bench Memo
 
+> Language: **English** | [日本語](README.ja.md) — *the README is translated; pages under `results/` are English-only*
+
 Empirical notes from running `llama.cpp` Speculative Decoding on **AMD Strix Halo (gfx1151)** with **Vulkan**. The headline finding: with a **Qwen3.5-27B-Q4_0 target + Qwen3.5-0.8B-Q4_0 draft + `--spec-draft-n-max=4`**, real-world prompts (code/chat/reasoning) hit **1.49× – 2.05× speedup** while staying **stable across runs (variance < 1.04×)** — far better than any n-gram-based spec-dec on the same hardware.
 
 This repo is a *lab notebook*, not a polished benchmark suite. Phases 1 (results), 2 (reproduction: Docker + scripts), 3 (full per-cell tables + raw JSON), and 4 (Qwen3.6-27B-MTP self-speculation) are all in place. Known open items are listed under "What we didn't measure (yet)" in [results/00-quick-take.md](results/00-quick-take.md).
