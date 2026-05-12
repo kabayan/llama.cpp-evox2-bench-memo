@@ -1,0 +1,50 @@
+diff --git a/common/ngram-map.cpp b/common/ngram-map.cpp
+index 8e3978f..cb5047f 100644
+--- a/common/ngram-map.cpp
++++ b/common/ngram-map.cpp
+@@ -74,8 +74,12 @@ llama_tokens common_ngram_simple_draft(
+     }
+     pattern.push_back(sampled); // add the last token to the pattern
+ 
++    // search backwards, but skip the current match (we are currently there).
++    // Continue past matches that don't have enough room for a useful draft
++    // (copy_max < n_draft_min): for periodic text the first match is often at
++    // distance == period < 2 * n_draft_min, which would otherwise reject all drafts.
+     size_t match_pos = 0; // we ignore position 0, position 0 == no match
+-                          // search backwards, but skip the current match (we are currently there)
++    size_t copy_max  = 0;
+     for (size_t j = cur_len - n_draft_min - 1; j > 0; --j) {
+         bool match = true;
+         for (size_t k = 0; k < pattern.size(); ++k) {
+@@ -85,21 +89,21 @@ llama_tokens common_ngram_simple_draft(
+             }
+         }
+         if (match) {
+-            match_pos = j;
+-            break;
++            const size_t copy_max_here = std::min(
++                    n_draft_max,
++                    cur_len - (j + n_draft_min)
++                    );
++            if (copy_max_here >= n_draft_min) {
++                match_pos = j;
++                copy_max  = copy_max_here;
++                break;
++            }
++            // else: too close to the end, keep searching for an older match
+         }
+     }
+     if (match_pos == 0) {
+         return draft_tokens;
+     }
+-
+-    const size_t copy_max = std::min(
+-            n_draft_max,
+-            cur_len - (match_pos + n_draft_min)
+-            );
+-    if (copy_max < n_draft_min) {
+-        return draft_tokens;
+-    }
+     LOG_DBG("%s: #tokens = %zu: found matching pattern at pos %zu, length %zu, draft length %zu\n",
+             __func__, cur_len,
+             match_pos, pattern.size(), copy_max);

@@ -39,9 +39,32 @@ If you only remember one knob: **target = 27B-Q4_0, draft = 0.8B-Q4_0, K = 4, mi
 
 | Phase | Status | Contents |
 |---|---|---|
-| **1. Results** | ✅ this push | README + `results/` + LICENSE |
-| 2. Reproduction | next session | `docker/` (Dockerfile.mtp-vulkan, patches), `scripts/` (single-file `run_bench.py` with `httpx` only) |
+| 1. Results | ✅ done | README + `results/` + LICENSE |
+| **2. Reproduction** | ✅ this push | [`docker/`](docker/) (Dockerfile.mtp-vulkan + 2 patches + build/run doc), [`scripts/`](scripts/) (single-file `run_bench.py` with `httpx` only + sweep recipes) |
 | 3. Discussion + raw data | later | Full per-cell tables, kernel-efficiency derivation, `data/raw/` JSON, future-work list |
+
+## Reproducing the numbers
+
+```bash
+# 1. Build the image (~10 min on Strix Halo)
+docker build -f docker/Dockerfile.mtp-vulkan -t llama-cpp-evox2-bench .
+
+# 2. Start the container with your GGUF directory mounted
+docker run -d --name llama-evox2 --device /dev/dri \
+  -v /path/to/gguf:/gguf:ro -p 10001:10001 \
+  llama-cpp-evox2-bench
+
+# 3. Run the recommended config (~7 min)
+pip install httpx
+python scripts/run_bench.py \
+  --container llama-evox2 \
+  --target /gguf/Qwen3.5-27B-Q4_0.gguf \
+  --draft /gguf/Qwen3.5-0.8B-Q4_0.gguf \
+  --draft-n-max 4 --draft-n-min 1 \
+  --output bench_k4.json
+```
+
+See [`docker/README.md`](docker/README.md) for the image internals, [`scripts/README.md`](scripts/README.md) for sweep recipes (K sweep, draft size sweep, 35B-A3B variant).
 
 ## Related
 

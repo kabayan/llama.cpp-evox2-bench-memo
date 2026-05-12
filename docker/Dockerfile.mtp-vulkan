@@ -1,0 +1,38 @@
+FROM ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y \
+    git \
+    build-essential \
+    cmake \
+    libvulkan-dev \
+    mesa-vulkan-drivers \
+    glslc \
+    glslang-tools \
+    libshaderc-dev \
+    spirv-tools \
+    && rm -rf /var/lib/apt/lists/*
+
+# am17an:mtp-clean PR #22673 head SHA (2026-05-10 確認時点)
+ARG LLAMA_CPP_REPO=https://github.com/am17an/llama.cpp.git
+ARG LLAMA_CPP_BRANCH=mtp-clean
+ARG LLAMA_CPP_REF=5d5f1b46e4f56885801c86363d4677a5f72f83af
+
+WORKDIR /app
+# patches/ (DLS-048): ngram-simple draft_n=0 の structural fix (A+B)
+#   01: common/ngram-map.cpp backward search を continue 化 (Option A)
+#   02: common/speculative.cpp state class が CLI flag を尊重 (Option B)
+COPY docker/patches/ /tmp/patches/
+RUN git clone --branch ${LLAMA_CPP_BRANCH} ${LLAMA_CPP_REPO} . && \
+    git checkout ${LLAMA_CPP_REF} && \
+    git apply --verbose /tmp/patches/01_ngram_simple_continue_search.patch && \
+    git apply --verbose /tmp/patches/02_ngram_simple_state_respect_cli.patch && \
+    mkdir build && cd build && \
+    cmake .. -DGGML_VULKAN=ON -DCMAKE_BUILD_TYPE=Release && \
+    cmake --build . --config Release -j$(nproc) --target llama-server llama-bench
+
+RUN ln -s /app/build/bin/llama-server /app/llama-server && \
+    ln -s /app/build/bin/llama-bench /app/llama-bench
+
+ENTRYPOINT ["tail", "-f", "/dev/null"]
