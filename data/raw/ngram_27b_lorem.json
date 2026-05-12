@@ -1,0 +1,252 @@
+{
+  "cells": {
+    "N1_mtp_vulkan_ngram_simple": {
+      "target": "/gguf/unsloth/Qwen3.5-27B-Q4_0.gguf",
+      "spec_type": "ngram-simple",
+      "draft_max": 16,
+      "draft_min": 5,
+      "workloads": {
+        "W1_pp4096_gen256": {
+          "tg_med": 13.190135324368685,
+          "pp_med": 301.73681300187127,
+          "ttft_med": 10.091576064936817,
+          "accept_med": 0.0,
+          "draft_n_med": 0,
+          "gen_tokens_med": 256,
+          "actual_prompt_med": 3045,
+          "runs": [
+            {
+              "ttft": 10.073886258061975,
+              "pp_ts": 302.26666472069144,
+              "tg_ts": 13.170670951815039,
+              "gen_tokens": 256,
+              "actual_prompt": 3045,
+              "draft_n": 0,
+              "draft_n_accepted": 0,
+              "accept_rate": 0.0
+            },
+            {
+              "ttft": 10.091576064936817,
+              "pp_ts": 301.73681300187127,
+              "tg_ts": 13.190135324368685,
+              "gen_tokens": 256,
+              "actual_prompt": 3045,
+              "draft_n": 0,
+              "draft_n_accepted": 0,
+              "accept_rate": 0.0
+            },
+            {
+              "ttft": 10.12596361618489,
+              "pp_ts": 300.71212137608387,
+              "tg_ts": 13.194649140112247,
+              "gen_tokens": 256,
+              "actual_prompt": 3045,
+              "draft_n": 0,
+              "draft_n_accepted": 0,
+              "accept_rate": 0.0
+            }
+          ]
+        },
+        "W2_pp8192_gen256": {
+          "tg_med": 12.98830728856497,
+          "pp_med": 285.5034794285072,
+          "ttft_med": 21.292209860868752,
+          "accept_med": 0.0,
+          "draft_n_med": 0,
+          "gen_tokens_med": 256,
+          "actual_prompt_med": 6079,
+          "runs": [
+            {
+              "ttft": 21.1165824662894,
+              "pp_ts": 287.8780223885442,
+              "tg_ts": 12.98830728856497,
+              "gen_tokens": 256,
+              "actual_prompt": 6079,
+              "draft_n": 0,
+              "draft_n_accepted": 0,
+              "accept_rate": 0.0
+            },
+            {
+              "ttft": 21.292209860868752,
+              "pp_ts": 285.5034794285072,
+              "tg_ts": 12.979563364252463,
+              "gen_tokens": 256,
+              "actual_prompt": 6079,
+              "draft_n": 0,
+              "draft_n_accepted": 0,
+              "accept_rate": 0.0
+            },
+            {
+              "ttft": 21.425445871893317,
+              "pp_ts": 283.7280510448865,
+              "tg_ts": 12.996272617582461,
+              "gen_tokens": 256,
+              "actual_prompt": 6079,
+              "draft_n": 0,
+              "draft_n_accepted": 0,
+              "accept_rate": 0.0
+            }
+          ]
+        },
+        "W3_pp64_gen1024": {
+          "tg_med": 13.522131174717167,
+          "pp_med": 131.69956876709705,
+          "ttft_med": 0.4479893180541694,
+          "accept_med": 0.15625,
+          "draft_n_med": 336,
+          "gen_tokens_med": 1024,
+          "actual_prompt_med": 59,
+          "runs": [
+            {
+              "ttft": 0.44358665542677045,
+              "pp_ts": 133.00670630688083,
+              "tg_ts": 13.194637962370775,
+              "gen_tokens": 1024,
+              "actual_prompt": 59,
+              "draft_n": 288,
+              "draft_n_accepted": 21,
+              "accept_rate": 0.07291666666666667
+            },
+            {
+              "ttft": 0.44887486658990383,
+              "pp_ts": 131.43974945227427,
+              "tg_ts": 13.614599106855797,
+              "gen_tokens": 1024,
+              "actual_prompt": 59,
+              "draft_n": 336,
+              "draft_n_accepted": 61,
+              "accept_rate": 0.18154761904761904
+            },
+            {
+              "ttft": 0.4479893180541694,
+              "pp_ts": 131.69956876709705,
+              "tg_ts": 13.522131174717167,
+              "gen_tokens": 1024,
+              "actual_prompt": 59,
+              "draft_n": 384,
+              "draft_n_accepted": 60,
+              "accept_rate": 0.15625
+            }
+          ]
+        }
+      }
+    },
+    "N2_mtp_vulkan_ngram_mod": {
+      "target": "/gguf/unsloth/Qwen3.5-27B-Q4_0.gguf",
+      "spec_type": "ngram-mod",
+      "draft_max": 16,
+      "draft_min": 5,
+      "workloads": {
+        "W1_pp4096_gen256": {
+          "tg_med": 18.452880583720457,
+          "pp_med": 280.80123273634746,
+          "ttft_med": 10.843969488050789,
+          "accept_med": 0.39453125,
+          "draft_n_med": 256,
+          "gen_tokens_med": 256,
+          "actual_prompt_med": 3045,
+          "runs": [
+            {
+              "ttft": 10.804875587113202,
+              "pp_ts": 281.8172199624142,
+              "tg_ts": 14.269900674233648,
+              "gen_tokens": 256,
+              "actual_prompt": 3045,
+              "draft_n": 128,
+              "draft_n_accepted": 36,
+              "accept_rate": 0.28125
+            },
+            {
+              "ttft": 10.849780761636794,
+              "pp_ts": 280.6508322054456,
+              "tg_ts": 18.452880583720457,
+              "gen_tokens": 256,
+              "actual_prompt": 3045,
+              "draft_n": 256,
+              "draft_n_accepted": 101,
+              "accept_rate": 0.39453125
+            },
+            {
+              "ttft": 10.843969488050789,
+              "pp_ts": 280.80123273634746,
+              "tg_ts": 40.337829580032796,
+              "gen_tokens": 256,
+              "actual_prompt": 3045,
+              "draft_n": 256,
+              "draft_n_accepted": 196,
+              "accept_rate": 0.765625
+            }
+          ]
+        },
+        "W2_pp8192_gen256": {
+          "tg_med": 14.512886256337646,
+          "pp_med": 275.11111823143995,
+          "ttft_med": 22.096526084002107,
+          "accept_med": 0.34375,
+          "draft_n_med": 128,
+          "gen_tokens_med": 256,
+          "actual_prompt_med": 6079,
+          "runs": [
+            {
+              "ttft": 22.07058057701215,
+              "pp_ts": 275.43453054115156,
+              "tg_ts": 14.196826839755461,
+              "gen_tokens": 256,
+              "actual_prompt": 6079,
+              "draft_n": 128,
+              "draft_n_accepted": 38,
+              "accept_rate": 0.296875
+            },
+            {
+              "ttft": 22.096526084002107,
+              "pp_ts": 275.11111823143995,
+              "tg_ts": 14.512886256337646,
+              "gen_tokens": 256,
+              "actual_prompt": 6079,
+              "draft_n": 128,
+              "draft_n_accepted": 44,
+              "accept_rate": 0.34375
+            },
+            {
+              "ttft": 22.097553114406765,
+              "pp_ts": 275.0983318617627,
+              "tg_ts": 19.153330067108257,
+              "gen_tokens": 256,
+              "actual_prompt": 6079,
+              "draft_n": 192,
+              "draft_n_accepted": 104,
+              "accept_rate": 0.5416666666666666
+            }
+          ]
+        },
+        "W3_pp64_gen1024": {
+          "error": "run: timed out",
+          "runs": [
+            {
+              "ttft": 0.4559138701297343,
+              "pp_ts": 129.41040811768028,
+              "tg_ts": 13.822090678568177,
+              "gen_tokens": 914,
+              "actual_prompt": 59,
+              "draft_n": 192,
+              "draft_n_accepted": 62,
+              "accept_rate": 0.3229166666666667
+            },
+            {
+              "ttft": 0.447742837946862,
+              "pp_ts": 131.7720686958305,
+              "tg_ts": 14.95316973123029,
+              "gen_tokens": 1024,
+              "actual_prompt": 59,
+              "draft_n": 384,
+              "draft_n_accepted": 163,
+              "accept_rate": 0.4244791666666667
+            }
+          ]
+        }
+      }
+    }
+  },
+  "started_at": "2026-05-11T08:41:13",
+  "finished_at": "2026-05-11T09:09:10"
+}

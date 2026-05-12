@@ -2,7 +2,7 @@
 
 Empirical notes from running `llama.cpp` Speculative Decoding on **AMD Strix Halo (gfx1151)** with **Vulkan**. The headline finding: with a **Qwen3.5-27B-Q4_0 target + Qwen3.5-0.8B-Q4_0 draft + `--spec-draft-n-max=4`**, real-world prompts (code/chat/reasoning) hit **1.49× – 2.05× speedup** while staying **stable across runs (variance < 1.04×)** — far better than any n-gram-based spec-dec on the same hardware.
 
-This repo is a *lab notebook*, not a polished benchmark suite. Phase 1 (this push) is the results. Phase 2 will publish the Docker setup and bench scripts. Phase 3 will add discussion and raw data.
+This repo is a *lab notebook*, not a polished benchmark suite. Phases 1 (results), 2 (reproduction: Docker + scripts), and 3 (full per-cell tables + raw JSON) are all in place. Known open items are listed under "What we didn't measure (yet)" in [results/00-quick-take.md](results/00-quick-take.md).
 
 ## TL;DR
 
@@ -34,14 +34,16 @@ If you only remember one knob: **target = 27B-Q4_0, draft = 0.8B-Q4_0, K = 4, mi
 - **[results/00-quick-take.md](results/00-quick-take.md)** — single-page summary with the K-sweep and draft-size-sweep tables
 - **[results/01-headline.md](results/01-headline.md)** — numbers behind the K=4 recommendation, kernel-efficiency curve, 35B-A3B contrast
 - **[results/02-context.md](results/02-context.md)** — hardware/software stack and what's specific to this configuration
+- **[results/03-full-tables.md](results/03-full-tables.md)** — full per-cell tables (every cell that contributes a number on 00/01) with raw-data links
+- **[data/raw/](data/raw/)** — sanitized per-run JSON (8 files, one per bench session) — re-runnable with `scripts/run_bench.py`
 
 ## Phases (publishing roadmap)
 
 | Phase | Status | Contents |
 |---|---|---|
-| 1. Results | ✅ done | README + `results/` + LICENSE |
-| **2. Reproduction** | ✅ this push | [`docker/`](docker/) (Dockerfile.mtp-vulkan + 2 patches + build/run doc), [`scripts/`](scripts/) (single-file `run_bench.py` with `httpx` only + sweep recipes) |
-| 3. Discussion + raw data | later | Full per-cell tables, kernel-efficiency derivation, `data/raw/` JSON, future-work list |
+| 1. Results | ✅ done | README + `results/00..02` + LICENSE |
+| 2. Reproduction | ✅ done | [`docker/`](docker/) (Dockerfile.mtp-vulkan + 2 patches + build/run doc), [`scripts/`](scripts/) (single-file `run_bench.py` with `httpx` only + sweep recipes) |
+| **3. Per-cell tables + raw data** | ✅ this push | [`results/03-full-tables.md`](results/03-full-tables.md) (per-cell tg/accept/draft_n medians) + [`data/raw/`](data/raw/) (8 sanitized JSON files) |
 
 ## Reproducing the numbers
 

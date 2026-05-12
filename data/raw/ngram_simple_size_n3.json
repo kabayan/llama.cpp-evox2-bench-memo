@@ -1,0 +1,168 @@
+{
+  "started_at": "2026-05-11T23:12:39Z",
+  "target": "/gguf/unsloth/Qwen3.6-35B-A3B-UD-Q6_K.gguf",
+  "cells": {
+    "S1_n12": {
+      "spec_type": "ngram-simple",
+      "size_n": 12,
+      "prompts": {
+        "P_code": {
+          "runs": [
+            {
+              "tg_ts": 56.86167741726265,
+              "predicted_n": 512,
+              "prompt_n": 128,
+              "draft_n": 238,
+              "draft_n_accepted": 38
+            },
+            {
+              "tg_ts": 57.47683217786565,
+              "predicted_n": 512,
+              "prompt_n": 128,
+              "draft_n": 240,
+              "draft_n_accepted": 38
+            },
+            {
+              "tg_ts": 57.46181510875378,
+              "predicted_n": 512,
+              "prompt_n": 128,
+              "draft_n": 240,
+              "draft_n_accepted": 38
+            }
+          ]
+        },
+        "P_chat": {
+          "runs": [
+            {
+              "tg_ts": 58.591324936387785,
+              "predicted_n": 512,
+              "prompt_n": 76,
+              "draft_n": null,
+              "draft_n_accepted": null
+            },
+            {
+              "tg_ts": 58.56398813438696,
+              "predicted_n": 512,
+              "prompt_n": 76,
+              "draft_n": null,
+              "draft_n_accepted": null
+            },
+            {
+              "tg_ts": 58.58212716509301,
+              "predicted_n": 512,
+              "prompt_n": 76,
+              "draft_n": null,
+              "draft_n_accepted": null
+            }
+          ]
+        },
+        "P_reason": {
+          "runs": [
+            {
+              "tg_ts": 58.03075357920541,
+              "predicted_n": 512,
+              "prompt_n": 110,
+              "draft_n": 22,
+              "draft_n_accepted": 5
+            },
+            {
+              "tg_ts": 58.05068300823628,
+              "predicted_n": 512,
+              "prompt_n": 110,
+              "draft_n": 22,
+              "draft_n_accepted": 5
+            },
+            {
+              "tg_ts": 57.99282089653503,
+              "predicted_n": 512,
+              "prompt_n": 110,
+              "draft_n": 22,
+              "draft_n_accepted": 5
+            }
+          ]
+        }
+      }
+    },
+    "S1_n3": {
+      "spec_type": "ngram-simple",
+      "size_n": 3,
+      "prompts": {
+        "P_code": {
+          "runs": [
+            {
+              "tg_ts": 39.051455402742164,
+              "predicted_n": 512,
+              "prompt_n": 128,
+              "draft_n": 1875,
+              "draft_n_accepted": 154
+            },
+            {
+              "tg_ts": 38.99506963704501,
+              "predicted_n": 512,
+              "prompt_n": 128,
+              "draft_n": 1895,
+              "draft_n_accepted": 158
+            },
+            {
+              "tg_ts": 42.309679131105085,
+              "predicted_n": 406,
+              "prompt_n": 128,
+              "draft_n": 1040,
+              "draft_n_accepted": 92
+            }
+          ]
+        },
+        "P_chat": {
+          "runs": [
+            {
+              "tg_ts": 38.90544692214222,
+              "predicted_n": 512,
+              "prompt_n": 76,
+              "draft_n": 1645,
+              "draft_n_accepted": 89
+            },
+            {
+              "tg_ts": 39.62568279811187,
+              "predicted_n": 512,
+              "prompt_n": 76,
+              "draft_n": 1470,
+              "draft_n_accepted": 91
+            },
+            {
+              "tg_ts": 38.47067929376549,
+              "predicted_n": 512,
+              "prompt_n": 76,
+              "draft_n": 1629,
+              "draft_n_accepted": 87
+            }
+          ]
+        },
+        "P_reason": {
+          "runs": [
+            {
+              "tg_ts": 31.12282080227459,
+              "predicted_n": 512,
+              "prompt_n": 110,
+              "draft_n": 2125,
+              "draft_n_accepted": 156
+            },
+            {
+              "tg_ts": 31.273103616099196,
+              "predicted_n": 512,
+              "prompt_n": 110,
+              "draft_n": 2043,
+              "draft_n_accepted": 152
+            },
+            {
+              "tg_ts": 30.7362318040157,
+              "predicted_n": 512,
+              "prompt_n": 110,
+              "draft_n": 2125,
+              "draft_n_accepted": 156
+            }
+          ]
+        }
+      }
+    }
+  }
+}
