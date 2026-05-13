@@ -80,6 +80,74 @@ Unsloth's published recipe uses `--spec-draft-n-max=3` with `-fa on`. We ran on 
 
 **One gap we can't close from this sweep**: Unsloth recommends `-fa on`. Our Strix Halo Vulkan build defaults to `-fa off` because of [llama.cpp #12629](https://github.com/ggml-org/llama.cpp/issues/12629)<sup>[↘](../README.md#rel-vulkan-flash-attn)</sup>, so we cannot evaluate the recipe's `-fa on` portion on this hardware. Whether `-fa on` changes the K=3 / K=4 trade-off remains an open question — see "What we didn't measure (yet)" in [00-quick-take.md](00-quick-take.md).
 
+## Does the speedup hold over a 512-token generation?
+
+External feedback (2026-05-13): "the 1.5-2× headline only applies to the very start of generation; the long-run average is closer to +20%". We re-ran the sweep with `max_tokens ∈ {32, 64, 128, 256, 512}` *and* recorded streaming-chunk wall-clock timestamps so we can compute cumulative tg at every token position. Same target (`Qwen3.6-27B-UD-Q4_K_XL`), same K=3 (Unsloth recipe), same hardware/build.
+
+**Short version: on this hardware the speedup does not collapse with length.** Every max_tokens setting averages 2.0–2.2× over the three prompts, and the cumulative tg at position 500 is still 1.81–2.31× of baseline. The windowed (50-token bucket) tg dips to 1.40× for one bucket on P_chat near position 250, but recovers to 2.15× by position 500.
+
+### max_tokens sweep — speedup vs. generation length
+
+| max_tokens | P_code (mtp / base) | P_chat | P_reason | **avg** |
+|---:|---:|---:|---:|---:|
+| 32 | 25.35 / 12.39 = 2.05× | 29.31 / 12.25 = 2.39× | 23.51 / 12.25 = 1.92× | **2.12×** |
+| 64 | 27.84 / 12.03 = 2.31× | 24.26 / 12.11 = 2.00× | 25.23 / 12.15 = 2.08× | **2.13×** |
+| 128 | 27.88 / 12.07 = 2.31× | 26.28 / 12.03 = 2.18× | 26.91 / 12.00 = 2.24× | **2.24×** |
+| 256 | 27.33 / 11.94 = 2.29× | 22.54 / 12.04 = 1.87× | 26.52 / 12.04 = 2.20× | **2.12×** |
+| 512 | 26.88 / 12.01 = 2.24× | 21.78 / 12.01 = 1.81× | 27.82 / 12.01 = 2.32× | **2.12×** |
+
+There is no length-dependent collapse. P_chat shows ~+10pp drop from K=32 → K=512, which lands at 1.81×, still well above the claim's lower bound of 1.5×. P_code and P_reason are essentially flat or rise slightly with length.
+
+### Cumulative tg curve at max_tokens=512
+
+For each generated-token position N, we compute the average tg of the first N tokens (tg(N) = N / time elapsed since the first token). If "first only fast" were true, tg(50) would be much higher than tg(500).
+
+| position | P_code | P_chat | P_reason |
+|---:|---:|---:|---:|
+| 50 | **2.26×** | 1.99× | 1.99× |
+| 100 | 2.21× | 2.00× | 2.20× |
+| 150 | 2.23× | 2.01× | 2.23× |
+| 200 | 2.21× | 1.97× | 2.21× |
+| 250 | 2.26× | **1.82×** | 2.20× |
+| 300 | 2.21× | 1.77× | 2.27× |
+| 350 | 2.24× | 1.79× | 2.30× |
+| 400 | 2.21× | 1.79× | 2.32× |
+| 450 | 2.24× | 1.78× | 2.32× |
+| 500 | **2.24×** | **1.81×** | **2.31×** |
+
+P_code and P_reason are flat or slightly rising with position. P_chat shows a small step-down between position 200 and 300 (1.97 → 1.77) and then stabilises around 1.78–1.81×. Even at its worst position, the cumulative speedup is **+77%, not +20%**.
+
+### Windowed (50-token bucket) tg — local instantaneous speedup
+
+The cumulative curve smooths out local variation. The windowed view shows what's happening in each 50-token slice:
+
+| position | P_code (wind) | P_chat (wind) | P_reason (wind) |
+|---:|---:|---:|---:|
+| 100 | 2.15× | 2.02× | 2.46× |
+| 150 | 2.30× | 2.02× | 2.31× |
+| 200 | 2.14× | 1.89× | 2.14× |
+| 250 | 2.46× | **1.40×** ⚠️ | 2.14× |
+| 300 | 2.01× | 1.55× | **2.68×** |
+| 350 | 2.47× | 1.90× | 2.48× |
+| 400 | 2.02× | 1.80× | 2.48× |
+| 450 | 2.48× | 1.70× | 2.30× |
+| 500 | 2.29× | **2.15×** | 2.29× |
+
+P_chat has one bucket (positions 200-250) where the instantaneous speedup drops to 1.40× — likely a transition from the reasoning preamble to the body of the answer, where the MTP head's accept rate falls temporarily. The bucket immediately recovers to 1.55× → 1.90× → 1.80× and ends at 2.15×. P_code and P_reason show no comparable dip.
+
+### Conclusion: where does "+20%" come from?
+
+On Strix Halo + Vulkan + `-fa off` + `Qwen3.6-27B-UD-Q4_K_XL` + K=3, **the speedup never approaches +20% at any granularity** — not on average over 32/64/128/256/512 tokens, not on cumulative tg over a 500-token window, not even on a single 50-token instantaneous bucket (the worst observed bucket is 1.40×, well above 1.2×). Likely sources of the +20% number:
+
+- A different hardware (CPU-only, low-bandwidth dGPU) where the MTP head's accept rate falls faster
+- A different quant or model — note that Phase 5's [MoE 35B-A3B](05-mtp-moe.md) lands at peak 1.42× regardless of length, so its averages are closer to +30-40%
+- An `n-gram-{simple,mod,cache}` configuration confused for spec-dec generally — Phase 1's [n-gram evaluation](00-quick-take.md#what-we-rejected) does land in the 0.94-1.20× range
+- An extremely long generation (max_tokens ≫ 512) where the MTP head's accept rate finally degrades — we didn't measure beyond 512 tokens, this is listed under "what we didn't measure" in [00-quick-take.md](00-quick-take.md)
+
+Within the bounds we measured, the 1.5-2× claim holds end-to-end over a full 512-token generation.
+
+Raw data: [`data/raw/specdec_qwen36_27b_mtp_length_sweep.json`](../data/raw/specdec_qwen36_27b_mtp_length_sweep.json) (10 cells × 3 prompts × (warmup + 3 measure runs); each run includes a `chunk_history` array of `[cumulative_gen_tokens, time_since_first_token]` pairs for post-hoc per-position analysis).
+
 ## Caveats
 
 - **`-fa on` (Vulkan flash-attn) not measured here.** Unsloth's published recipe uses `-fa on` but our Strix Halo Vulkan path defaults to `-fa off` per [llama.cpp #12629](https://github.com/ggml-org/llama.cpp/issues/12629)<sup>[↘](../README.md#rel-vulkan-flash-attn)</sup>. All Phase 1-3 numbers also use `-fa off`, so the comparison stays apples-to-apples — but the absolute speedups might shift with `-fa on`. Re-running this sweep under `-fa on` is the most obvious next experiment.
