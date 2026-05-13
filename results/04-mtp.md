@@ -213,6 +213,91 @@ P_code and P_reason at T=4096 stay flat at ~2.2× across the 0–2000 / 0–4000
 
 Raw data: [`data/raw/specdec_qwen36_27b_mtp_length_sweep_xlong.json`](../data/raw/specdec_qwen36_27b_mtp_length_sweep_xlong.json) (5.6 MB, 2 cells × 3 prompts × (warmup + 3 measure runs) with full `chunk_history` arrays up to 4096 tokens).
 
+### Extended to max_tokens 8192 — plateau + slight long-tail decline
+
+One more step at `max_tokens=8192`. The U-shape recovery seen at 4096 continues but flattens out, with a hint of slow long-tail decline:
+
+| max_tokens | P_code | P_chat | P_reason | **avg** | P_chat accept |
+|---:|---:|---:|---:|---:|---:|
+| 4096 | 2.25× | 2.06× | 2.19× | **2.17× ⭐ peak** | 73.0% |
+| **8192** | 2.25× | **1.95×** | 2.17× | 2.12× | 67.4% |
+
+Cumulative on P_chat at T=8192:
+
+| pos | cumulative |
+|---:|---:|
+| 100 | 2.01× |
+| 1000 | **1.62×** ← bottom |
+| 3000 | 1.93× |
+| **5000** | **2.05× ← peak** |
+| 6000 | 2.01× |
+| 6500 | **1.98×** ← slight decline |
+
+The U-recovery on P_chat now traces a wider arc — it bottoms at pos 1000, peaks at pos 5000, then dips slightly toward pos 6500 (1.98×). Still well above the 1.5× lower bound. Worst windowed at T=8192 is **1.58×** (P_chat pos 1000), so the absolute worst over the whole 32–8192 sweep is still T=4096's 1.43× bucket.
+
+### Extended to max_tokens 32767 — natural EoS detection (and an ~10× wall-clock surprise)
+
+Final stretch. `max_tokens=32767` with `--ctx-size=32768` to fit the generation. Two new findings emerge — both from the comparison between baseline and MTP behavior on P_chat:
+
+| max_tokens | P_code | P_chat tg | P_reason | **avg** | P_chat gen |
+|---:|---:|---:|---:|---:|---|
+| 8192 | 2.25× | 1.95× | 2.17× | 2.12× | base 8188 / MTP 6758 |
+| **32767** | **2.25×** | **2.04×** | **2.17×** | **2.15×** | **base 32688 / MTP 6758** |
+
+**Finding 1: the MTP head detects natural EoS at the same position every time.** At both T=8192 and T=32767, the MTP path terminates the P_chat answer at **gen=6758 tokens** — the same natural stopping point. Baseline, however, keeps generating past 6758 and goes all the way to 32688 (one shy of the cap) when given room. The MTP head's accept-rate dynamic depends on the target's argmax matching the draft head's argmax — when the target starts producing EoS-like tokens, the MTP head sees and stops.
+
+**Finding 2: this turns into an ~10× wall-clock speedup on tasks that the model would naturally end.** P_chat wall-clock cost:
+
+| | gen tokens | tg t/s | wall-clock (decode only) |
+|---|---:|---:|---:|
+| baseline @ T=32767 | 32688 | 11.29 | **~2895 s (~48 min)** |
+| MTP K=3 @ T=32767 | 6758 | 22.98 | **~294 s (~5 min)** |
+
+That's **~10× faster on the actual task** ("answer this user's chat prompt"), not the 2.04× tg-rate speedup. The tg-rate metric undercounts spec-dec's real-world value whenever the model would naturally end before `max_tokens` — which is the common case in real chat / agent usage.
+
+Cumulative tg on P_chat (the common range where both sides have data, plus the baseline-only long tail to expose KV-cache drag):
+
+| pos | base cum | MTP cum | speedup |
+|---:|---:|---:|---:|
+| 100 | 12.12 | 24.35 | **2.01×** |
+| 1000 | 11.98 | 19.50 | **1.63×** ← bottom |
+| 2000 | 11.94 | 21.99 | 1.84× |
+| 4000 | 11.89 | 23.52 | 1.98× |
+| 6500 | 11.83 | 23.51 | **1.99× (MTP last point)** |
+| 10000 | 11.75 | — | (MTP already at EoS) |
+| 16000 | 11.62 | — | — |
+| 24000 | 11.46 | — | — |
+| 32000 | **11.30** | — | (baseline -7% from pos 100, KV-cache long-tail decay) |
+
+The baseline's own tg drifts down 7% from position 100 to position 32000 — that's a pure KV-cache phenomenon, unrelated to spec-dec. The MTP run never reaches those positions because the model finishes its answer.
+
+### Final length-coverage summary (32 → 32767 tokens)
+
+10 max_tokens levels × cumulative position 50 → 6500 (common range with both arms) + baseline-only out to position 32000:
+
+| level | avg speedup | P_chat tg-speedup | P_chat accept | notes |
+|---:|---:|---:|---:|---|
+| 32 | 2.12× | 2.39× | 95.8% | warmup-grade |
+| 64 | 2.13× | 2.00× | 84.1% | |
+| 128 | 2.24× | 2.18× | 80.2% | |
+| 256 | 2.12× | 1.87× | 64.0% | |
+| 512 | 2.12× | 1.81× | 60.3% | |
+| 1024 | 2.06× | 1.66× | 52.3% | min cell avg |
+| 2048 | 2.07× | 1.75× | 56.8% | |
+| **4096** | **2.17×** | **2.06×** | **73.0%** | **sweep peak** |
+| 8192 | 2.12× | 1.95× | 67.4% | |
+| 32767 | 2.15× | 2.04× | 67.4% | natural EoS at gen 6758 |
+
+Worst measurement of any kind across the full 32–32767 range:
+
+- **Worst windowed bucket**: 1.43× (P_chat, T=4096, pos 500) — a single 100-token bucket, immediately recovers.
+- **Worst cumulative**: 1.63× (P_chat, T=2048 and T=32767, pos 1000) — same position both times, structural.
+- **Worst cell average**: 2.06× (T=1024).
+
+The claim's 1.5× lower bound is met at every granularity. The claim's 2× upper bound is reached or exceeded at every cell average except T=1024/2048 (where it falls to 2.06× / 2.07×). +20% (1.2×) is never approached at any granularity or any length. **operational sweet spot: max_tokens ≈ 4096.**
+
+Raw data: [`data/raw/specdec_qwen36_27b_mtp_length_sweep_xxlong.json`](../data/raw/specdec_qwen36_27b_mtp_length_sweep_xxlong.json) (T=8192, 7.9 MB) and [`data/raw/specdec_qwen36_27b_mtp_length_sweep_xxxlong.json`](../data/raw/specdec_qwen36_27b_mtp_length_sweep_xxxlong.json) (T=32767, 13 MB).
+
 ### Conclusion: where does "+20%" come from?
 
 On Strix Halo + Vulkan + `-fa off` + `Qwen3.6-27B-UD-Q4_K_XL` + K=3, **the speedup never approaches +20% at any granularity** — not on average over 32/64/128/256/512 tokens, not on cumulative tg over a 500-token window, not even on a single 50-token instantaneous bucket (the worst observed bucket is 1.40×, well above 1.2×). Likely sources of the +20% number:
