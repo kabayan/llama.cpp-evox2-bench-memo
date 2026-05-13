@@ -71,6 +71,25 @@ Absolute tg at K=4 (21.55-27.65 t/s) lands in the same band as Phase 1-3's exter
 
 See [04-mtp.md](04-mtp.md) for the full claim-vs-measured comparison and the K=8 P_chat collapse analysis.
 
+## Qwen3.6-35B-A3B-MTP-GGUF (MoE variant; same Unsloth claim, different outcome)
+
+Unsloth's [`Qwen3.6-35B-A3B-MTP-GGUF`](https://huggingface.co/unsloth/Qwen3.6-35B-A3B-MTP-GGUF) ships with **identical** "~1.5-2× faster generation" wording and the same `--spec-draft-n-max=3` recipe. On the same hardware/build/`-fa off` stack as Phase 4, the result is qualitatively different.
+
+| K | P_code tg / pp | P_chat tg / pp | P_reason tg / pp | g_avg | accept (min-max) |
+|---:|---:|---:|---:|---:|---:|
+| baseline | 57.84 / 346.8 | 58.62 / 252.3 | 58.64 / 333.7 | 1.00× | — |
+| 1 | 74.27 (1.28×) / 317.1 | 71.60 (1.22×) / 227.7 | 76.24 (1.30×) / 297.7 | 1.27× | 83-97% |
+| **2** ⭐ | **85.42 (1.48×)** / 313.1 | **78.23 (1.33×)** / 219.0 | **84.31 (1.44×)** / 286.6 | **1.42×** | 73-93% |
+| 3 (Unsloth recipe) | 84.55 (1.46×) / 295.9 | 64.91 (**1.11×**) / 207.7 | 84.24 (1.44×) / 261.5 | 1.33× | 57-85% |
+| 4 | 78.83 (1.36×) / 287.5 | 59.44 (**1.01×**) / 198.7 | 80.08 (1.37×) / 266.1 | 1.25× | 48-75% |
+| 8 | 46.82 (**0.81×** ⚠️) / 288.9 | 31.32 (**0.53×** ⚠️) / 206.6 | 47.64 (**0.81×** ⚠️) / 275.5 | **0.72×** ⚠️ | 28-53% |
+
+**On MoE 35B-A3B, K=2 is the sweet spot (1.42× avg), and the Unsloth recipe's K=3 is suboptimal — P_chat collapses to 1.11× (accept 56.6%).** K=8 regresses on every prompt — a more severe collapse than the dense 27B's K=8 (which only saw P_chat drop slightly). Peak avg 1.42× **does not reach the claimed lower bound of 1.5×** — a sharp contrast with the dense 27B case, where K=3 reproduced 2.13× avg.
+
+Structural reading: the 35B-A3B baseline is already at 58 t/s (matching DLS-052's external-draft observation); the MoE expert routing makes every draft-verify round costly, so the spec-dec gain runs out earlier than on dense 27B. MTP self-speculation at K=2 still beats Phase 1-3's external-draft K=4 substantially (**+42% avg vs +11% avg**, and P_chat 1.33× vs 0.90×) because the MTP head avoids the per-round forward pass through a separate model.
+
+See [05-mtp-moe.md](05-mtp-moe.md) for the full analysis (K=3 vs K=2 trade-off, K=8 collapse mechanism, Unsloth-claim divergence, comparison vs DLS-052 external-draft).
+
 ## What we rejected
 
 | Approach | Why rejected | Result |
@@ -84,8 +103,9 @@ See [04-mtp.md](04-mtp.md) for the full claim-vs-measured comparison and the K=8
 ## What we didn't measure (yet)
 
 - K=8/16 on 35B-A3B (predicted to be neutral or worse given K=4 already shows slowdown)
-- `-fa on` for the MTP K-sweep (Unsloth's recipe default; we ran `-fa off` because of [llama.cpp #12629](https://github.com/ggml-org/llama.cpp/issues/12629)<sup>[↘](../README.md#rel-vulkan-flash-attn)</sup> on gfx1151 — re-running this sweep on a backend where Vulkan flash-attn is correct would close that gap)
-- MTP-GGUF on a MoE target (e.g. 35B-A3B class) — Unsloth has not released one as of 2026-05-12; structurally interesting because the 35B-A3B baseline at 58 t/s already eats most of the spec-dec margin
+- `-fa on` for the MTP K-sweep on both 27B *and* 35B-A3B (Unsloth's recipe default; we ran `-fa off` because of [llama.cpp #12629](https://github.com/ggml-org/llama.cpp/issues/12629)<sup>[↘](../README.md#rel-vulkan-flash-attn)</sup> on gfx1151 — re-running these sweeps on a backend where Vulkan flash-attn is correct would close the gap between our 35B-A3B peak 1.42× and Unsloth's claimed 1.5-2× lower bound)
+- MTP-GGUF on another MoE family beyond Qwen3.6-35B-A3B (the K=2-vs-K=3 shift may be specific to its 256-expert / 8-routed routing pattern)
+- A K=2/3 cross-grade comparison on Qwen3.6-27B (we measured K=2 = 2.06× there but didn't characterize it as a candidate sweet spot — the K=4 peak made K=2 look uninteresting on 27B)
 - Other model families (Llama 3.x): tokenizer compatibility is the gate, not measured
 - Direct kernel profiling (RGP / rocprof / Tracy) to confirm the partial-inefficiency model
 - AMD ROCm 7.x + gfx1151 (we tested mtp-rocm and got worse results; Vulkan path is preferred on this hardware)
