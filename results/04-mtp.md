@@ -135,6 +135,34 @@ The cumulative curve smooths out local variation. The windowed view shows what's
 
 P_chat has one bucket (positions 200-250) where the instantaneous speedup drops to 1.40× — likely a transition from the reasoning preamble to the body of the answer, where the MTP head's accept rate falls temporarily. The bucket immediately recovers to 1.55× → 1.90× → 1.80× and ends at 2.15×. P_code and P_reason show no comparable dip.
 
+### Extended to max_tokens 1024 and 2048
+
+After the initial 32-512 sweep, we re-ran the bench at `max_tokens ∈ {1024, 2048}` with the same per-chunk timestamp recording, to see whether a longer generation produces a delayed collapse that the 512-token cut didn't catch.
+
+| max_tokens | P_code (mtp / base) | P_chat | P_reason | **avg** |
+|---:|---:|---:|---:|---:|
+| 512 (from above) | 26.88 / 12.01 = 2.24× | 21.78 / 12.01 = 1.81× | 27.82 / 12.01 = 2.32× | **2.12×** |
+| **1024** | 26.96 / 11.92 = 2.26× | 19.90 / 11.98 = **1.66×** | 27.07 / 11.97 = 2.26× | **2.06×** |
+| **2048** | 26.74 / 11.93 = 2.24× | 20.85 / 11.94 = **1.75×** | 26.59 / 11.93 = 2.23× | **2.07×** |
+
+The cell-level averages (1024 = 2.06×, 2048 = 2.07×) are within 3% of the 512-token result. P_code and P_reason are essentially flat, P_chat dips slightly at 1024 then partially recovers at 2048.
+
+Cumulative tg curve at max_tokens=2048 (every 500 tokens):
+
+| pos | P_code | P_chat | P_reason |
+|---:|---:|---:|---:|
+| 100 | 2.36× | 2.00× | 2.20× |
+| 500 | 2.26× | 1.67× | 2.31× |
+| 1000 | 2.16× | **1.63×** ← bottom | 2.26× |
+| 1500 | 2.21× | 1.66× | 2.26× |
+| 2000 | 2.21× | **1.74×** ← recovery | 2.22× |
+
+P_chat's cumulative tg traces a shallow **U-shape**: 2.00× at position 100, bottoming at 1.63× around position 1000, then recovering to 1.74× by position 2000. The U-shape is consistent with the windowed view — the 100-token bucket at position 1000 shows the lowest local speedup (1.35×), and the bucket at position 2000 jumps back up to 2.39× (P_chat windowed wind tg 28.35 vs baseline 11.88 t/s).
+
+**Tentative reading of the U-shape**: in long chat-template outputs the early tokens are smooth reasoning preamble where MTP head accepts well, the middle includes more transitions and rare-token sequences (transitions between sub-points, conjunctions, named entities) that the MTP head mis-predicts, and the late tokens drift back into a more "mature" answer-body pattern (lists, repeated phrasing) that the MTP head accepts again. P_code and P_reason don't have this U-shape — both stay flat at ~2.2× over the same 2000-token window.
+
+Even at the worst single point (P_chat windowed bucket at position 1000, 1.35× = +35%), the speedup never approaches the external claim of +20% (1.2×). Stretching to max_tokens=2048 does not validate "first only fast"; it instead shows the speedup is structurally durable in this configuration. Raw data: [`data/raw/specdec_qwen36_27b_mtp_length_sweep_long.json`](../data/raw/specdec_qwen36_27b_mtp_length_sweep_long.json) (5 MB, 4 cells × 3 prompts × 4 runs each, with `chunk_history` arrays).
+
 ### Conclusion: where does "+20%" come from?
 
 On Strix Halo + Vulkan + `-fa off` + `Qwen3.6-27B-UD-Q4_K_XL` + K=3, **the speedup never approaches +20% at any granularity** — not on average over 32/64/128/256/512 tokens, not on cumulative tg over a 500-token window, not even on a single 50-token instantaneous bucket (the worst observed bucket is 1.40×, well above 1.2×). Likely sources of the +20% number:
