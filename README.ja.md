@@ -10,11 +10,11 @@
 
 | 推奨/設定 | Spec-dec 構成 | Qwen3.5-27B-Q4_0 での結果 |
 |---|---|---|
-| **27B-Q4_0 の default** ⭐ | `--spec-type` (draft model)、`-md Qwen3.5-0.8B-Q4_0.gguf`、`--spec-draft-n-max=4 --spec-draft-n-min=1` | **1.49× – 2.05×** (mean 1.82×)、accept 96-98%、variance < 1.04× |
-| P_code を最大化する設定 | 同設定で `--spec-draft-n-max=16 --spec-draft-n-min=1` | **P_code で 2.45×**、ただし accept 92-97% (variance ↑、kernel efficiency ↓) |
-| **代替: Qwen3.6-27B + MTP self-spec** | target `Qwen3.6-27B-UD-Q4_K_XL.gguf` + `--spec-type mtp --spec-draft-n-max=4` (`-md` 不要) | **1.83× – 2.33×** (mean 2.15×)、accept 54-81%。GGUF 1 ファイル完結で外部 draft 不要。[Unsloth の HF model card](https://huggingface.co/unsloth/Qwen3.6-27B-MTP-GGUF)<sup>[↘](#rel-unsloth-mtp)</sup> は「**~1.5-2× faster generation**」と謳うが、公式設定 K=3 で本実測 **2.13× avg = 主張上限を再現** ([04-mtp.md](results/04-mtp.md)) |
-| **Qwen3.6-35B-A3B (MoE) + MTP** | target `Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf` + `--spec-type mtp --spec-draft-n-max=2` (`-md` 不要) | **1.22× – 1.48×** (mean 1.42×) at K=2 ⭐。**Unsloth recipe K=3 は本ハードで suboptimal** (P_chat 1.11× に低下)。[HF model card](https://huggingface.co/unsloth/Qwen3.6-35B-A3B-MTP-GGUF)<sup>[↘](#rel-unsloth-mtp-35b)</sup> は同一の「~1.5-2×」文言だが、**peak が 1.5× に届かず**、claim 下限すら未達。K=8 では全 prompt baseline 倒れ ([05-mtp-moe.md](results/05-mtp-moe.md)) |
-| 35B-A3B + 外部 draft は非推奨 | 同 35B target + 外部 0.8B draft + K=4 | gain +11% のみ、P_chat は **0.90×** に slowdown (MTP self-spec K=2 が上記表示の通り上回る) |
+| **27B-Q4_0 の default** ⭐ | `--spec-type` (draft model)、`-md Qwen3.5-0.8B-Q4_0.gguf`、`--spec-draft-n-max=4 --spec-draft-n-min=1` | **1.49× – 2.05×** (mean 1.82×)、accept 96-98%、variance < 1.04×。**tg 19.8–27.4 t/s、pp 119–185 t/s** (baseline tg ≈ 13.3 t/s、pp ≈ 220–300 t/s) |
+| P_code を最大化する設定 | 同設定で `--spec-draft-n-max=16 --spec-draft-n-min=1` | **P_code で 2.45×** (tg 32.6 t/s、pp 188 t/s)、ただし accept 92-97% (variance ↑、kernel efficiency ↓) |
+| **代替: Qwen3.6-27B + MTP self-spec** | target `Qwen3.6-27B-UD-Q4_K_XL.gguf` + `--spec-type mtp --spec-draft-n-max=4` (`-md` 不要) | **1.83× – 2.33×** (mean 2.15×)、accept 54-81%。**tg 21.6–27.7 t/s、pp 106–155 t/s** (baseline tg ≈ 11.8 t/s、pp ≈ 230–350 t/s)。GGUF 1 ファイル完結で外部 draft 不要。[Unsloth の HF model card](https://huggingface.co/unsloth/Qwen3.6-27B-MTP-GGUF)<sup>[↘](#rel-unsloth-mtp)</sup> は「**~1.5-2× faster generation**」と謳うが、公式設定 K=3 で本実測 **2.13× avg = 主張上限を再現** ([04-mtp.md](results/04-mtp.md)) |
+| **Qwen3.6-35B-A3B (MoE) + MTP** | target `Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf` + `--spec-type mtp --spec-draft-n-max=2` (`-md` 不要) | **1.22× – 1.48×** (mean 1.42×) at K=2 ⭐。**tg 78.2–85.4 t/s、pp 219–313 t/s** (baseline tg ≈ 58.4 t/s、pp ≈ 252–347 t/s)。**Unsloth recipe K=3 は本ハードで suboptimal** (P_chat 1.11× に低下)。[HF model card](https://huggingface.co/unsloth/Qwen3.6-35B-A3B-MTP-GGUF)<sup>[↘](#rel-unsloth-mtp-35b)</sup> は同一の「~1.5-2×」文言だが、**peak が 1.5× に届かず**、claim 下限すら未達。K=8 では全 prompt baseline 倒れ ([05-mtp-moe.md](results/05-mtp-moe.md)) |
+| 35B-A3B + 外部 draft は非推奨 | 同 35B target + 外部 0.8B draft + K=4 | gain +11% のみ、P_chat は **0.90×** に slowdown。**tg 52.7–65.2 t/s、pp 222–302 t/s** (MTP self-spec K=2 が上記表示の通り上回る) |
 | n-gram 系全般 | `--spec-type ngram-{simple,mod,cache}` | 棄却。best case (ngram-mod on P_code、35B-A3B のみ) で 1.52× だが **variance 1.76×**、chat/reason は flat か悪化 |
 
 1 つだけ覚えるなら: **target = 27B-Q4_0、draft = 0.8B-Q4_0、K = 4、min = 1**。
