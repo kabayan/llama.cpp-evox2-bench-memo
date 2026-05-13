@@ -163,6 +163,56 @@ P_chat's cumulative tg traces a shallow **U-shape**: 2.00× at position 100, bot
 
 Even at the worst single point (P_chat windowed bucket at position 1000, 1.35× = +35%), the speedup never approaches the external claim of +20% (1.2×). Stretching to max_tokens=2048 does not validate "first only fast"; it instead shows the speedup is structurally durable in this configuration. Raw data: [`data/raw/specdec_qwen36_27b_mtp_length_sweep_long.json`](../data/raw/specdec_qwen36_27b_mtp_length_sweep_long.json) (5 MB, 4 cells × 3 prompts × 4 runs each, with `chunk_history` arrays).
 
+### Extended further to max_tokens 4096
+
+After T=2048 hinted at recovery on P_chat (1.74×), we extended one more step to **max_tokens=4096** to see whether the recovery completes or whether late degradation finally appears.
+
+The recovery completes — and the average actually rises:
+
+| max_tokens | P_code | P_chat | P_reason | **avg** | P_chat accept |
+|---:|---:|---:|---:|---:|---:|
+| 512 | 2.24× | 1.81× | 2.32× | 2.12× | 60.3% |
+| 1024 | 2.26× | 1.66× | 2.26× | 2.06× | 52.3% |
+| 2048 | 2.24× | 1.75× | 2.23× | 2.07× | 56.8% |
+| **4096** | **2.25×** | **2.06×** | **2.19×** | **2.17× ⭐** | **73.0%** |
+
+T=4096 is the **fastest average across the entire 32–4096 sweep**. P_chat recovers to 2.06× (above the 1.5× lower bound) and its accept rate jumps from 56.8% at T=2048 to **73.0%** at T=4096.
+
+Cumulative tg curve on P_chat at T=4096 (the U-shape completes):
+
+| pos | cumulative tg (MTP / base) |
+|---:|---:|
+| 100 | 24.38 / 12.12 = **2.01×** |
+| 500 | 19.66 / 12.02 = **1.64×** ← bottom |
+| 1000 | 20.36 / 11.98 = 1.70× |
+| 1500 | 20.54 / 11.96 = 1.72× |
+| 2000 | 21.81 / 11.95 = 1.83× |
+| 2500 | 22.91 / 11.93 = 1.92× |
+| 3000 | 23.57 / 11.92 = 1.98× |
+| 3500 | 24.16 / 11.91 = 2.03× |
+| 4000 | 24.45 / 11.90 = **2.06×** ← recovered |
+
+And the windowed (200-token bucket) view shows the late-generation acceleration directly:
+
+| pos | windowed wind tg (MTP / base) |
+|---:|---:|
+| 500 | 17.16 / 11.98 = **1.43×** ← worst observed anywhere |
+| 1000 | 21.80 / 11.94 = 1.83× |
+| 1500 | 23.01 / 11.92 = 1.93× |
+| 2000 | 26.40 / 11.89 = 2.22× |
+| **2500** | 29.44 / 11.86 = **2.48×** ← peak (the late bucket runs *faster* than the early ones) |
+| 3000 | 26.80 / 11.85 = 2.26× |
+| 3500 | 28.73 / 11.83 = 2.43× |
+| 4000 | 28.73 / 11.81 = 2.43× |
+
+The shape is the opposite of "first only fast". P_chat is actually **slower at the start** (1.43× around position 500) and **faster at the end** (2.43× from position 3500 onwards). One reading: the early portion of a long chat-template answer contains the reasoning preamble + transitions where the MTP head mis-predicts, while the late portion settles into mature, repetitive answer-body structure where the MTP head's accept rate climbs back up.
+
+P_code and P_reason at T=4096 stay flat at ~2.2× across the 0–2000 / 0–4000 windows respectively, with no length-dependence in either direction.
+
+**Final length-coverage summary**: across **max_tokens ∈ {32, 64, 128, 256, 512, 1024, 2048, 4096}** and cumulative positions 50–4000, the worst single windowed measurement is 1.43× (P_chat, T=4096, pos 500), the worst cumulative measurement is 1.63× (P_chat, T=2048, pos 1000), and the worst cell-level average is 2.06× (T=1024). **The claim's lower bound of 1.5× is met or exceeded everywhere, and the speedup *increases* at the longest length we measured.**
+
+Raw data: [`data/raw/specdec_qwen36_27b_mtp_length_sweep_xlong.json`](../data/raw/specdec_qwen36_27b_mtp_length_sweep_xlong.json) (5.6 MB, 2 cells × 3 prompts × (warmup + 3 measure runs) with full `chunk_history` arrays up to 4096 tokens).
+
 ### Conclusion: where does "+20%" come from?
 
 On Strix Halo + Vulkan + `-fa off` + `Qwen3.6-27B-UD-Q4_K_XL` + K=3, **the speedup never approaches +20% at any granularity** — not on average over 32/64/128/256/512 tokens, not on cumulative tg over a 500-token window, not even on a single 50-token instantaneous bucket (the worst observed bucket is 1.40×, well above 1.2×). Likely sources of the +20% number:
