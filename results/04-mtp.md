@@ -301,7 +301,7 @@ Raw data: [`data/raw/specdec_qwen36_27b_mtp_length_sweep_xxlong.json`](../data/r
 
 ### Extended to max_tokens 65535 — context-window limit reached
 
-Final length test. `max_tokens=65535` with `--ctx-size=65536` (the practical ceiling on Strix Halo: ~33 GB extra KV cache, headroom maintained on the 128 GB unified memory). 27B-MTP K=3 still holds the claim:
+Final length test in this sweep. `max_tokens=65535` with `--ctx-size=65536` (the bench's practical ceiling — see the next sub-section for the actual ctx limit and memory profile). 27B-MTP K=3 still holds the claim:
 
 | max_tokens | P_code | P_chat tg | P_reason | **avg** | P_chat gen |
 |---:|---:|---:|---:|---:|---|
@@ -332,6 +332,45 @@ Slope is **~-0.7% per 4K tokens**, the same rate observed at T=32767 (-7% over 3
 
 Raw data: [`data/raw/specdec_qwen36_27b_mtp_length_sweep_xxxxlong.json`](../data/raw/specdec_qwen36_27b_mtp_length_sweep_xxxxlong.json) (T=65535, 13 MB).
 
+### Memory & throughput at the ctx ceiling (T=131072 single-shot)
+
+The sweep above stops at `--ctx-size=65536` because that's where the per-cell wall-clock cost stops being defensible (the T=65535 sweep alone took 3.5 h; doubling it would mean another 7+ h for one more data point on a curve that already plateaued). But "where does it actually break?" is a separate question — so we also ran a single-shot probe at `--ctx-size=131072` (twice the sweep ceiling) with a real 130 000-token Lorem-Ipsum prompt and `max_tokens=100`.
+
+**Memory (server self-report at startup, ctx=131072 + MTP K=3):**
+
+| component | size |
+|---|---|
+| Main 27B model buffer (Vulkan) | **16 387 MiB ≈ 16.0 GB** |
+| Main KV cache (16 KV-groups × 131072 cells, fp16, K + V) | **8 192 MiB = 8.0 GB** |
+| MTP draft head model | 1 249 MiB ≈ 1.2 GB |
+| MTP draft KV (1 layer × 131072) | 512 MiB |
+| Compute buffers (Vulkan + Host) | ~1 GB |
+| CPU-mapped tensors | ~1.4 GB host RAM |
+
+Strix Halo has a **tiny 1 GB dedicated VRAM partition** and shares the rest of the 128 GB DDR5 with the GPU through GTT. So `rocm-smi --showmemuse` (which only sees the 1 GB partition) reads `VRAM%=77` and stays there throughout — that's misleading. The real number to watch is `free -m`:
+
+| state | system RAM used | server share |
+|---|---:|---:|
+| no server | 11.4 GB | — |
+| server idle (ctx=131072 reserved) | 41.7 GB | 30.3 GB |
+| 130 K prompt processing peak | 45.1 GB | 33.7 GB |
+| server stopped | 11.4 GB | — |
+
+So the ceiling is nowhere near 128 GB. **No OOM, no swapping, ~33 GB out of 128 GB at the worst point.** This corrects an earlier internal estimate that pessimistically placed the KV cache at ~66 GB by ignoring GQA + the actual 16 KV-groups in this model.
+
+**Throughput at ctx=131072:**
+
+| measurement | rate | comparison |
+|---|---:|---|
+| Prompt eval (130 000 tokens) | **64.78 t/s** | 213 t/s at 128 tokens → 3.3× slowdown |
+| MTP K=3 decode (100 tokens after 130 K KV is loaded) | **6.70 t/s** | ~25 t/s at short ctx → **3.7× slowdown** |
+
+The decode rate is the new finding here. tg drops to **~1/4 of the typical MTP K=3 rate** once the KV cache is full, because attention cost on every decoded token now scales with 130 K positions. The 1.5–2× *speedup ratio* may still hold relative to baseline at the same ctx (baseline would be even slower), but the absolute throughput cliff means **operational ctx for this model on this hardware tops out around 32–65 K**, not 131 K. The DLS-060 sweep peak at T=4096 (avg 2.17×) remains the right default; the 32–65 K range is "still fine, just slower"; 131 K is "it works, but you'll wait."
+
+**Caveat — accept rate at full ctx not measured.** The single-shot probe used `/v1/chat/completions` non-streaming, so the server timing report doesn't break out MTP accept rate. A streaming bench at full ctx is needed to confirm whether the speedup *ratio* survives or whether MTP accept rate also degrades.
+
+Raw data: [`.claude/.dls/raw/20260514_dls061_qwen36_27b_mtp_ctx131072_*.{log,json}`](#) (server log + monitor log + response, llmtools-side only — not bundled in this public repo because it's a single-shot probe rather than a sweep).
+
 ### Conclusion: where does "+20%" come from?
 
 On Strix Halo + Vulkan + `-fa off` + `Qwen3.6-27B-UD-Q4_K_XL` + K=3, **the speedup never approaches +20% at any granularity** — not on average over 32/64/128/256/512 tokens, not on cumulative tg over a 500-token window, not even on a single 50-token instantaneous bucket (the worst observed bucket is 1.40×, well above 1.2×). Likely sources of the +20% number:
@@ -339,9 +378,9 @@ On Strix Halo + Vulkan + `-fa off` + `Qwen3.6-27B-UD-Q4_K_XL` + K=3, **the speed
 - A different hardware (CPU-only, low-bandwidth dGPU) where the MTP head's accept rate falls faster
 - A different quant or model — note that Phase 5's [MoE 35B-A3B](05-mtp-moe.md) lands at peak 1.42× regardless of length, so its averages are closer to +30-40%
 - An `n-gram-{simple,mod,cache}` configuration confused for spec-dec generally — Phase 1's [n-gram evaluation](00-quick-take.md#what-we-rejected) does land in the 0.94-1.20× range
-- An extremely long generation (max_tokens ≫ 512) where the MTP head's accept rate finally degrades — we didn't measure beyond 512 tokens, this is listed under "what we didn't measure" in [00-quick-take.md](00-quick-take.md)
+- An extremely long generation where the MTP head's accept rate finally degrades — we measured up to max_tokens=65535 in the sweep above (avg still 2.13×) and probed memory + throughput at ctx=131072 separately, so this hypothesis is no longer the explanation in this configuration
 
-Within the bounds we measured, the 1.5-2× claim holds end-to-end over a full 512-token generation.
+Within the bounds we measured (max_tokens 32 → 65535, plus ctx=131072 single-shot for memory/throughput characterization), the 1.5-2× claim holds end-to-end as a tg-rate ratio. The absolute throughput cliff at ctx ≥ 65–131 K is a separate concern documented in the previous sub-section.
 
 Raw data: [`data/raw/specdec_qwen36_27b_mtp_length_sweep.json`](../data/raw/specdec_qwen36_27b_mtp_length_sweep.json) (10 cells × 3 prompts × (warmup + 3 measure runs); each run includes a `chunk_history` array of `[cumulative_gen_tokens, time_since_first_token]` pairs for post-hoc per-position analysis).
 
