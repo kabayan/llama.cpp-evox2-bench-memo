@@ -271,9 +271,9 @@ Cumulative tg on P_chat (the common range where both sides have data, plus the b
 
 The baseline's own tg drifts down 7% from position 100 to position 32000 — that's a pure KV-cache phenomenon, unrelated to spec-dec. The MTP run never reaches those positions because the model finishes its answer.
 
-### Final length-coverage summary (32 → 32767 tokens)
+### Final length-coverage summary (32 → 65535 tokens)
 
-10 max_tokens levels × cumulative position 50 → 6500 (common range with both arms) + baseline-only out to position 32000:
+11 max_tokens levels × cumulative position 50 → 6500 (common range with both arms) + baseline-only out to position 60000:
 
 | level | avg speedup | P_chat tg-speedup | P_chat accept | notes |
 |---:|---:|---:|---:|---|
@@ -286,17 +286,51 @@ The baseline's own tg drifts down 7% from position 100 to position 32000 — tha
 | 2048 | 2.07× | 1.75× | 56.8% | |
 | **4096** | **2.17×** | **2.06×** | **73.0%** | **sweep peak** |
 | 8192 | 2.12× | 1.95× | 67.4% | |
-| 32767 | 2.15× | 2.04× | 67.4% | natural EoS at gen 6758 |
+| 32767 | 2.15× | 2.04× | 67.4% | MTP EoS at gen 6758 (deterministic) |
+| 65535 | 2.13× | 1.94× | 67.4% | MTP EoS gen 4715-7256 (variance), baseline EoS non-deterministic |
 
-Worst measurement of any kind across the full 32–32767 range:
+Worst measurement of any kind across the full 32–65535 range:
 
 - **Worst windowed bucket**: 1.43× (P_chat, T=4096, pos 500) — a single 100-token bucket, immediately recovers.
-- **Worst cumulative**: 1.63× (P_chat, T=2048 and T=32767, pos 1000) — same position both times, structural.
+- **Worst cumulative**: 1.63× (P_chat, T=2048 / T=32767 / T=65535, pos 1000) — same position three times, structural.
 - **Worst cell average**: 2.06× (T=1024).
 
-The claim's 1.5× lower bound is met at every granularity. The claim's 2× upper bound is reached or exceeded at every cell average except T=1024/2048 (where it falls to 2.06× / 2.07×). +20% (1.2×) is never approached at any granularity or any length. **operational sweet spot: max_tokens ≈ 4096.**
+The claim's 1.5× lower bound is met at every granularity. The claim's 2× upper bound is reached or exceeded at every cell average except T=1024/2048 (where it falls to 2.06× / 2.07×). +20% (1.2×) is never approached at any granularity or any length up to the context-window ceiling. **operational sweet spot: max_tokens ≈ 4096.**
 
 Raw data: [`data/raw/specdec_qwen36_27b_mtp_length_sweep_xxlong.json`](../data/raw/specdec_qwen36_27b_mtp_length_sweep_xxlong.json) (T=8192, 7.9 MB) and [`data/raw/specdec_qwen36_27b_mtp_length_sweep_xxxlong.json`](../data/raw/specdec_qwen36_27b_mtp_length_sweep_xxxlong.json) (T=32767, 13 MB).
+
+### Extended to max_tokens 65535 — context-window limit reached
+
+Final length test. `max_tokens=65535` with `--ctx-size=65536` (the practical ceiling on Strix Halo: ~33 GB extra KV cache, headroom maintained on the 128 GB unified memory). 27B-MTP K=3 still holds the claim:
+
+| max_tokens | P_code | P_chat tg | P_reason | **avg** | P_chat gen |
+|---:|---:|---:|---:|---:|---|
+| 32767 | 2.25× | 2.04× | 2.17× | 2.15× | base 32688 / MTP 6758 |
+| **65535** | **2.27×** | **1.94×** | **2.18×** | **2.13×** | **base 65456 (run1) / 6497 (run2) / 8031 (run3) / MTP 4715-7256** |
+
+Three new findings, all in the long-tail behavior:
+
+**Finding 1: baseline P_chat EoS becomes non-deterministic at this length.** At T=32767 every baseline P_chat run went to gen ~32688 (the cap). At T=65535 only **1 of 3 runs** went to the cap (gen 65456); the other two stopped near the natural EoS at gen 6497 / 8031. Same `temp=0.0`, same prompt, same chat template — the EoS argmax tie-break flips depending on KV-cache numerical state. This means baseline's worst-case wall-clock is highly variable: in 1/3 of trials it spends ~92 minutes on the same chat task that MTP finishes in ~5 min.
+
+**Finding 2: MTP's natural-EoS prediction also gains run-to-run variance at long ctx.** At T=32767 the MTP P_chat path stopped at exactly gen=6758 every time. At T=65535 it bracketed 4715 / 6758 / 7256 — the EoS prediction loosens once the context window doubles. (Median is still ~6758, so the avg-tg comparison is unchanged.)
+
+**Finding 3: baseline KV-cache long-tail decay extends linearly to 60K tokens.** Cumulative tg on P_chat (common range + baseline-only long tail to position 60000):
+
+| pos | base cum | MTP cum | speedup |
+|---:|---:|---:|---:|
+| 100 | 12.13 | 24.45 | **2.02×** |
+| 1000 | 11.99 | 19.52 | **1.63×** ← bottom |
+| 2000 | 11.96 | 22.00 | 1.84× |
+| 4000 | 11.89 | 23.55 | 1.98× |
+| 6500 | 11.84 | 23.50 | **1.99× (MTP last point)** |
+| 10000 | 11.75 | — | — |
+| 32000 | 11.30 | — | — (matches T=32767 measurement) |
+| 48000 | 11.00 | — | — |
+| 60000 | **10.79** | — | (baseline -11% from pos 100) |
+
+Slope is **~-0.7% per 4K tokens**, the same rate observed at T=32767 (-7% over 32K). Pure KV-cache effect, unrelated to spec-dec. The MTP arm never reaches these positions because the model finishes the answer.
+
+Raw data: [`data/raw/specdec_qwen36_27b_mtp_length_sweep_xxxxlong.json`](../data/raw/specdec_qwen36_27b_mtp_length_sweep_xxxxlong.json) (T=65535, 13 MB).
 
 ### Conclusion: where does "+20%" come from?
 
