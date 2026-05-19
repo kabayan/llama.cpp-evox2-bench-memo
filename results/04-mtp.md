@@ -384,12 +384,98 @@ Within the bounds we measured (max_tokens 32 → 65535, plus ctx=131072 single-s
 
 Raw data: [`data/raw/specdec_qwen36_27b_mtp_length_sweep.json`](../data/raw/specdec_qwen36_27b_mtp_length_sweep.json) (10 cells × 3 prompts × (warmup + 3 measure runs); each run includes a `chunk_history` array of `[cumulative_gen_tokens, time_since_first_token]` pairs for post-hoc per-position analysis).
 
+## Multi-quant sweep at T=65536 (mainline llama.cpp build 9211)
+
+Everything above was measured on the `am17an:mtp-clean@5d5f1b46` branch (Phase 1-3 build). Two things changed between that and the next sweep:
+
+1. **`am17an/mtp-clean` was merged into mainline.** [PR #22673](../README.md#rel-pr-22673) landed in `ggml-org/llama.cpp` at commit `053e01dff` (build 9211, 2026-05-17). The CLI surface also changed: `--spec-type mtp` is now `--spec-type draft-mtp` upstream (the old `am17an` spelling no longer parses on mainline). Two follow-up patches went in alongside the merge — [PR #23198](https://github.com/ggml-org/llama.cpp/pull/23198) (verify-pass perf) and [PR #23237](https://github.com/ggml-org/llama.cpp/pull/23237) (layer source fix).
+2. **Two more dense quants were tested**, on top of the original UD-Q4_K_XL: [`unsloth/Qwen3.6-27B-MTP-GGUF` Q4_0](https://huggingface.co/unsloth/Qwen3.6-27B-MTP-GGUF) (15.0 GB, smallest, dense) and `Qwen3.6-27B-UD-Q6_K_XL` (24.2 GB, biggest, dense). Both carry the MTP head in-file.
+
+Same hardware (Strix Halo, Vulkan, gfx1151, `-fa off`), same prompts (P_code / P_chat / P_reason), same methodology — but `max_tokens=65536` and `ctx_size=65536` end-to-end, the new sweep ceiling that the length-dependence section landed on.
+
+### Three dense quants × K ∈ {baseline, 3, 4, 5}
+
+Speedup is the per-prompt MTP tg divided by the same prompt's baseline tg measured on the same model in the same session.
+
+#### Qwen3.6-27B-UD-Q4_K_XL (17.9 GB — the original target; rerun on mainline)
+
+| K | P_code (mtp / base) | P_chat | P_reason | **avg** | accept (min-max) |
+|---:|---:|---:|---:|---:|---:|
+| baseline | 11.86 t/s | 11.90 | 11.93 | 1.00× | — |
+| 3 | 24.56 (2.07×) | 19.57 (1.64×) | 23.63 (1.98×) | 1.90× | 59-81% |
+| **4** ⭐ | **25.40 (2.14×)** | **25.66 (2.16×)** | **24.94 (2.09×)** | **2.13×** | 75-93% |
+| 5 | 24.65 (2.08×) | 17.39 (1.46×) | 22.52 (1.89×) | 1.81× | 45-71% |
+
+The K=4 cell on this run reproduces the K=4 result from the original Phase 4 sweep (2.15× there, 2.13× here) within run-to-run noise. The K=4 P_chat run hit the 64985-token cap with 93% accept rate — same dynamic as the length sweep, where long chat-template answers settle into a high-accept body region.
+
+#### Qwen3.6-27B-Q4_0 (15.0 GB — the smallest dense MTP quant; absolute throughput record)
+
+| K | P_code (mtp / base) | P_chat | P_reason | **avg** | accept (min-max) |
+|---:|---:|---:|---:|---:|---:|
+| baseline | 12.91 t/s | 13.20 | 13.19 | 1.00× | — |
+| 3 | 28.14 (2.18×) | 22.26 (1.69×) | 27.48 (2.08×) | 1.98× | 60-83% |
+| **4** ⭐ | **28.49 (2.21×)** | 21.06 (1.60×) | 28.04 (2.13×) | 1.98× | 51-76% |
+| 5 | 27.77 (2.15×) | 19.67 (1.49×) | 27.01 (2.05×) | 1.90× | 44-70% |
+
+Q4_0 has the **fastest absolute throughput in this entire study — 28.49 t/s at K=4 P_code**, ~+12% over UD-Q4_K_XL's 25.40. The speedup *ratio* is slightly lower (1.98× vs 2.13×) because the baseline is also faster (smaller weights to read), so spec-dec has less headroom. K=3 and K=4 are a statistical tie on the average; K=3 wins on accept-rate stability, K=4 wins on absolute peak. Pick K=3 if accept rate matters (chat-heavy), K=4 if peak throughput matters (code-heavy).
+
+#### Qwen3.6-27B-UD-Q6_K_XL (24.2 GB — the biggest dense MTP quant; highest speedup ratio)
+
+| K | P_code (mtp / base) | P_chat | P_reason | **avg** | accept (min-max) |
+|---:|---:|---:|---:|---:|---:|
+| baseline | 7.95 t/s | 7.95 | 7.95 | 1.00× | — |
+| 3 | 19.24 (2.42×) | 14.93 (1.88×) | 18.14 (2.28×) | 2.19× | 60-86% |
+| **4** ⭐ | **20.56 (2.59×)** | **15.09 (1.90×)** | **20.09 (2.53×)** | **2.34×** | 52-79% |
+| 5 | 19.81 (2.49×) | 15.28 (1.92×) | 18.84 (2.37×) | 2.26× | 50-70% |
+
+UD-Q6_K_XL has the **highest speedup ratio in this study — avg 2.34× at K=4**. The mechanism is the same as Phase 1-3 saw with bigger targets: when the baseline is slow (7.95 t/s here, because Q6 reads more weight per pass), spec-dec recovers a larger fraction of the lost throughput by amortising verify cost over multiple accepted tokens. Absolute throughput (20.56 t/s peak) is below UD-Q4_K_XL and Q4_0; the *ratio* is the highest, the absolute throughput is the lowest.
+
+### K=4 is the universal peak for dense 27B (across 3 quants)
+
+| quant | size | baseline tg (avg P_code) | K=4 avg speedup | K=4 absolute peak | K=4 accept (best-worst) |
+|---|---:|---:|---:|---:|---:|
+| Q4_0 | 15.0 GB | 12.91 | 1.98× | **28.49 t/s** ⭐ absolute peak | 76% / 51% |
+| UD-Q4_K_XL | 17.9 GB | 11.86 | 2.13× | 25.66 t/s | 93% / 75% |
+| UD-Q6_K_XL | 24.2 GB | 7.95 | **2.34×** ⭐ ratio peak | 20.56 t/s | 79% / 52% |
+
+**Operational picks by use case:**
+
+- **Default / general**: UD-Q4_K_XL @ K=4 — best balance, most stable accept rate (75-93%), and reproduces the original Phase 4 K=4 result.
+- **Code-heavy / absolute throughput**: Q4_0 @ K=4 — fastest single number (28.49 t/s), accept rate lower but acceptable on P_code.
+- **Quality-sensitive / highest speedup ratio**: UD-Q6_K_XL @ K=4 — biggest target, slowest absolute tg, but spec-dec gives the largest *fractional* recovery (2.34×).
+
+K=4 is the peak on the cell-level average for **all three** dense quants. K=3 is the Unsloth-recipe recommendation and ties K=4 on Q4_0; K=4 wins by a small margin on UD-Q4_K_XL (+0.23×) and UD-Q6_K_XL (+0.15×).
+
+### 35B-A3B MoE recheck on mainline (K=3, T=65536)
+
+The original Phase 5 sweep on `am17an:mtp-clean` peaked at K=2 = 1.42× avg (see [05-mtp-moe.md](05-mtp-moe.md)). On mainline build 9211 with K ∈ {3, 4, 5}:
+
+| K | P_code (mtp / base) | P_chat | P_reason | **avg** | accept (min-max) |
+|---:|---:|---:|---:|---:|---:|
+| baseline | 58.83 t/s | 58.00 | 58.71 | 1.00× | — |
+| **3** ⭐ | **76.47 (1.30×)** | **61.76 (1.07×)** | **78.99 (1.35×)** | **1.24×** | 58-83% |
+| 4 | 75.40 (1.28×) | 54.20 (**0.93×** ⚠️) | 75.20 (1.28×) | 1.16× | 45-73% |
+| 5 | 68.94 (1.17×) | 48.72 (**0.84×** ⚠️) | 67.83 (1.16×) | 1.06× | 40-65% |
+
+On mainline, **K=3 is the best K we measured here, but it still does not match DLS-054's K=2 = 1.42× peak**. K=4 and K=5 actively regress on P_chat (0.93× and 0.84× — both below 1.0). The MoE accept-rate curve falls off at much lower K than dense does (P_chat 58% @ K=3 vs 93% @ K=4 on UD-Q4_K_XL), so the MoE sweet spot is **lower** in K than dense. Whether K=2 reproduces its 1.42× on mainline — and whether the original 1.42× was the true peak — is an open question this sweep didn't cover.
+
+The absolute peak rate is **79 t/s at K=3 P_reason** — fastest single number across any model in this study, dense or MoE. This is unrelated to spec-dec efficiency: the 35B-A3B baseline is already ~58 t/s on this hardware because only 3B parameters are active per token.
+
+### Conclusions across the multi-quant sweep
+
+- **The K=4 sweet spot is robust across dense quants.** It was first observed on UD-Q4_K_XL, and now reproduces on Q4_0 (15.0 GB) and UD-Q6_K_XL (24.2 GB). The accept-rate curve scales with K independent of quant; quant only shifts the baseline tg.
+- **Pick the quant by use case, not by speedup ratio.** Q4_0 wins absolute throughput, UD-Q6_K_XL wins ratio, UD-Q4_K_XL wins accept-rate stability — all at K=4.
+- **MoE is a different regime.** 35B-A3B's sweet spot is at a lower K than dense (K ≤ 3 on mainline), and the average speedup never crosses 1.5× in any of our measurements. The high absolute tg (~79 t/s peak) is the MoE-architecture story, not the MTP story.
+- **Mainline migration is a no-op for the speedup numbers.** UD-Q4_K_XL @ K=4 on mainline produces 2.13× avg, indistinguishable from `am17an:mtp-clean`'s 2.15× avg in the original Phase 4 sweep. PRs #23198 / #23237 land alongside the merge but do not visibly shift the cell-average ratios.
+
+Raw data: [`data/raw/specdec_qwen36_dls062_t65536_multiquant.json`](../data/raw/specdec_qwen36_dls062_t65536_multiquant.json) (16 cells = 4 models × {baseline, K=3, K=4, K=5}, 3 prompts × (warmup + 3 measure runs), build 9211).
+
 ## Caveats
 
 - **`-fa on` (Vulkan flash-attn) not measured here.** Unsloth's published recipe uses `-fa on` but our Strix Halo Vulkan path defaults to `-fa off` per [llama.cpp #12629](https://github.com/ggml-org/llama.cpp/issues/12629)<sup>[↘](../README.md#rel-vulkan-flash-attn)</sup>. All Phase 1-3 numbers also use `-fa off`, so the comparison stays apples-to-apples — but the absolute speedups might shift with `-fa on`. Re-running this sweep under `-fa on` is the most obvious next experiment.
 - **MTP + `--mmproj` not supported.** The target is an image-text-to-text model, but the mtp-clean branch disallows `--mmproj` alongside `--spec-type mtp`. Open upstream constraint, no workaround.
-- **One model family tested.** MTP is a per-model architecture feature; the K=4 sweet spot from Qwen3.6-27B may not transfer to other MTP-capable models. As of 2026-05-12 Qwen3.6-35B-A3B does not have an MTP-GGUF release.
-- **[PR #22673](../README.md#rel-pr-22673) is unmerged.** The build (`am17an:mtp-clean@5d5f1b46`) is the same as Phase 1-3. MTP self-speculation rides on the same checkpoint-based spec-dec mechanism.
+- **One model family tested across multiple quants.** MTP is a per-model architecture feature. Within `Qwen3.6` we have now covered 3 dense quants (Q4_0 / UD-Q4_K_XL / UD-Q6_K_XL) and 1 MoE quant (35B-A3B-UD-Q4_K_XL); K=4 is the dense sweet spot across all three dense quants. Whether the K=4 sweet spot transfers to *other* MTP-capable model families (Gemma 4, DeepSeek-MoE, etc.) remains untested — as of 2026-05-19 no other public MTP-GGUF release is available for those families.
+- **[PR #22673](../README.md#rel-pr-22673) was merged into mainline** at `ggml-org/llama.cpp` commit `053e01dff` (build 9211, 2026-05-17). The CLI flag changed: `--spec-type mtp` (am17an branch) → `--spec-type draft-mtp` (mainline). Two follow-up patches landed alongside the merge ([PR #23198](https://github.com/ggml-org/llama.cpp/pull/23198) verify-pass perf, [PR #23237](https://github.com/ggml-org/llama.cpp/pull/23237) layer source fix). Phase 1-3 numbers in this repo were taken on `am17an:mtp-clean@5d5f1b46`; the multi-quant sweep above is on the mainline build. Cell-level averages match within run-to-run noise (UD-Q4_K_XL K=4: 2.15× am17an → 2.13× mainline).
 
 ## Raw data
 

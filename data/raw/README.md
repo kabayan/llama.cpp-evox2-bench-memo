@@ -18,6 +18,7 @@ Per-run JSON dumps from each bench session referenced in [`../../results/`](../.
 | [`specdec_qwen36_27b_mtp_length_sweep_xxxlong.json`](specdec_qwen36_27b_mtp_length_sweep_xxxlong.json) | 2026-05-13 | Same setup, **ctx_size raised to 32768** for max_tokens=32767 (DLS-059). avg 2.15×, P_chat tg-speedup 2.04×. **Two findings**: (a) MTP terminates P_chat at gen=6758 (natural EoS) while baseline runs to gen=32688 (max), so wall-clock cost is **~10× lower for MTP** on this task (294s vs 2895s); (b) baseline tg drifts down 7% from pos 100 to pos 32000 — pure KV-cache long-tail decay, unrelated to spec-dec. |
 | [`specdec_qwen36_27b_mtp_length_sweep_xxxxlong.json`](specdec_qwen36_27b_mtp_length_sweep_xxxxlong.json) | 2026-05-14 | Same setup, **ctx_size raised to 65536** for max_tokens=65535 (DLS-060, the practical Strix Halo ceiling: ~33 GB extra KV cache). avg 2.13×, P_chat tg-speedup 1.94×. **Three findings**: (a) baseline P_chat EoS becomes non-deterministic — only 1 of 3 runs went to the cap (gen 65456); the other two stopped at 6497 / 8031 near the natural EoS, so baseline's worst-case wall-clock is highly variable; (b) MTP P_chat gen also gains run-to-run variance (4715 / 6758 / 7256 vs the deterministic 6758 at T=32767); (c) baseline KV-cache long-tail decay extends linearly to pos 60000 (10.79 t/s = -11% from pos 100), same -0.7%/4K slope as observed at T=32767. |
 | [`specdec_qwen36_35b_a3b_mtp_sweep.json`](specdec_qwen36_35b_a3b_mtp_sweep.json) | 2026-05-12 | Qwen3.6-35B-A3B-UD-Q4_K_XL + built-in MTP head (MoE variant), K=1/2/3/4/5/8 (DLS-054). Same `--spec-type mtp` setup as the 27B file. K=2 peak / K=3 (Unsloth recipe) suboptimal / K=8 all-prompt collapse. |
+| [`specdec_qwen36_dls062_t65536_multiquant.json`](specdec_qwen36_dls062_t65536_multiquant.json) | 2026-05-18 to 2026-05-19 | **Mainline llama.cpp build 9211** (commit `053e01dff`, after [PR #22673](https://github.com/ggml-org/llama.cpp/pull/22673) was merged). Multi-quant sweep at `max_tokens=65536` / `ctx_size=65536` covering **4 models × 4 K conditions × 3 prompts × (warmup + 3 measure runs)** = 16 cells. Models: `Qwen3.6-27B-Q4_0-MTP` (15.0 GB, dense, absolute throughput peak 28.49 t/s @ K=4), `Qwen3.6-27B-UD-Q4_K_XL` (17.9 GB, dense, balanced default — same target as the original Phase 4 sweep), `Qwen3.6-27B-UD-Q6_K_XL` (24.2 GB, dense, speedup ratio peak 2.34× @ K=4), `Qwen3.6-35B-A3B-UD-Q4_K_XL` (22.9 GB, MoE, K=3 peak 1.24× — K=4/5 regress on P_chat). K conditions: baseline (`spec_type=null`) and `--spec-type draft-mtp --spec-draft-n-max=K` for K ∈ {3, 4, 5}. New top-level fields: `schema_version`, `build`, `common_config`. Each cell preserves the per-prompt `warmup`, `runs`, `tg_med`/`tg_min`/`tg_max`/`pp_med`/`ttft_med`/`accept_med`/`draft_n_med`/`gen_tokens_med`/`actual_prompt_med` keys verbatim. (DLS-062) |
 | [`ngram_35b_a3b_real.json`](ngram_35b_a3b_real.json) | 2026-05-11 | 35B-A3B + none / ngram-{simple, mod, cache} on real prompts (post-patch ngram-simple). |
 | [`ngram_35b_a3b_cache_oracle.json`](ngram_35b_a3b_cache_oracle.json) | 2026-05-11 | 35B-A3B + ngram-cache static (oracle per-prompt corpus, project repo corpus) vs ngram-mod. |
 | [`ngram_simple_size_n3.json`](ngram_simple_size_n3.json) | 2026-05-11 | 35B-A3B + ngram-simple `--spec-ngram-simple-size-n=3` vs `=12` (DLS-049 rejection). |
@@ -25,7 +26,7 @@ Per-run JSON dumps from each bench session referenced in [`../../results/`](../.
 
 ## Schema
 
-Two layouts coexist:
+Three layouts coexist:
 
 **Real-prompt layout** (most files):
 
@@ -73,6 +74,41 @@ Each `<run>` is:
 }
 ```
 
+**Multi-quant DLS-062 layout** (only `specdec_qwen36_dls062_t65536_multiquant.json`):
+
+```jsonc
+{
+  "schema_version": "dls-062-multiquant-v1",
+  "description": "<one-paragraph methodology>",
+  "build": {
+    "llama_cpp_commit": "053e01dff",
+    "build_number": 9211,
+    "branch": "mainline (ggml-org/llama.cpp)",
+    "merged_prs": ["#22673", "#23198", "#23237"]
+  },
+  "common_config": {
+    "container": "...", "binary": "...", "gpu_layers": 99,
+    "ctx": 65536, "max_tokens": 65536,
+    "spec_type_cli_flag": "draft-mtp",
+    "prompts": ["P_code", "P_chat", "P_reason"],
+    "reasoning_format": "auto", "runs_per_prompt": 3
+  },
+  "cells": {
+    "<model_label>_<K_label>": {
+      "model": "<gguf basename>",
+      "model_quant_label": "<short tag, e.g. 27B-UD-Q6_K_XL>",
+      "spec_type_internal": "mtp" | null,    // null on baseline cells
+      "draft_n_max": <int> | null,            // null on baseline cells
+      "draft_n_min": <int> | null,
+      "started_at": "<iso8601>", "finished_at": "<iso8601>",
+      "prompts": { ... same per-prompt shape as the real-prompt layout above ... }
+    }
+  }
+}
+```
+
+`spec_type_internal` records the internal flag value (`"mtp"`) that the bench harness used; the actual CLI flag passed to `llama-server` is `--spec-type draft-mtp` (mainline build), translated by the harness. Baseline cells set `spec_type_internal: null` and pass no `--spec-type` flag.
+
 **Legacy lorem-ipsum layout** (only `ngram_27b_lorem.json`):
 
 ```jsonc
@@ -102,6 +138,7 @@ Each file maps to a `scripts/run_bench.py` invocation. The mapping is documented
 - 35B-A3B (`specdec_35b_a3b_k4.json`): target `Qwen3.6-35B-A3B-UD-Q6_K.gguf` + draft `Qwen3.5-0.8B-Q4_0.gguf` (same vocab) + `--draft-n-max 4`.
 - MTP self-speculation, dense 27B (`specdec_qwen36_27b_mtp_sweep.json`): target `Qwen3.6-27B-UD-Q4_K_XL.gguf` (downloaded directly from Unsloth — the MTP head is in the same GGUF), pass `--spec-type mtp --spec-draft-n-max K` to `llama-server`. No `--draft` flag. Server flags reused: `--jinja --reasoning-format auto --flash-attn off -np 1 -ngl 99`.
 - MTP self-speculation, MoE 35B-A3B (`specdec_qwen36_35b_a3b_mtp_sweep.json`): same invocation as above but target `Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf` (22.9 GB) from [`unsloth/Qwen3.6-35B-A3B-MTP-GGUF`](https://huggingface.co/unsloth/Qwen3.6-35B-A3B-MTP-GGUF). K=2 was the empirical sweet spot here, not Unsloth's K=3 recipe.
+- MTP self-speculation, multi-quant T=65536 (`specdec_qwen36_dls062_t65536_multiquant.json`): mainline `llama.cpp@053e01dff` (build 9211), pass `--spec-type draft-mtp --spec-draft-n-max=K --ctx-size=65536` and run with `--max-tokens=65536`. The `am17an:mtp-clean` flag `--spec-type mtp` no longer parses on mainline. Targets cycled across `Qwen3.6-27B-Q4_0-MTP.gguf`, `Qwen3.6-27B-UD-Q4_K_XL.gguf`, `Qwen3.6-27B-UD-Q6_K_XL.gguf` (all from [`unsloth/Qwen3.6-27B-MTP-GGUF`](https://huggingface.co/unsloth/Qwen3.6-27B-MTP-GGUF)) and `Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf` (from the MoE MTP-GGUF repo).
 - n-gram cells (`ngram_*.json`): `--spec-type ngram-{simple, mod, cache}` (no `--draft`).
 
 Hardware/software pinning is in [`../../results/02-context.md`](../../results/02-context.md). Differences in llama.cpp build SHA, GPU driver, or chat-template handling will all change the numbers.

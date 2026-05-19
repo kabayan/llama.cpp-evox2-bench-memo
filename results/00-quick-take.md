@@ -71,6 +71,8 @@ Absolute tg at K=4 (21.55-27.65 t/s) lands in the same band as Phase 1-3's exter
 
 See [04-mtp.md](04-mtp.md) for the full claim-vs-measured comparison and the K=8 P_chat collapse analysis.
 
+**Cross-quant check (mainline build 9211, T=65536):** the K=4 sweet spot reproduces on three Qwen3.6-27B dense quants. **Q4_0 (15.0 GB)** wins absolute throughput at **28.49 t/s peak (avg 1.98×)**, **UD-Q4_K_XL (17.9 GB)** wins accept-rate stability (75-93% at K=4, **avg 2.13×**), and **UD-Q6_K_XL (24.2 GB)** wins the speedup ratio (**avg 2.34×**, absolute peak 20.56 t/s). PR #22673 was merged into mainline on 2026-05-17; the CLI flag changed from `--spec-type mtp` to `--spec-type draft-mtp`. See the [multi-quant sweep](04-mtp.md#multi-quant-sweep-at-t65536-mainline-llamacpp-build-9211) section for full tables.
+
 ## Qwen3.6-35B-A3B-MTP-GGUF (MoE variant; same Unsloth claim, different outcome)
 
 Unsloth's [`Qwen3.6-35B-A3B-MTP-GGUF`](https://huggingface.co/unsloth/Qwen3.6-35B-A3B-MTP-GGUF) ships with **identical** "~1.5-2× faster generation" wording and the same `--spec-draft-n-max=3` recipe. On the same hardware/build/`-fa off` stack as Phase 4, the result is qualitatively different.
